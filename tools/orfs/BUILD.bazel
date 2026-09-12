@@ -22,3 +22,20 @@ orfs_gds(
     klayout = ":klayout_local",
     src = ":mac8_final",
 )
+
+orfs_flow(
+    name = "training_tile",
+    arguments = {
+        "CORE_UTILIZATION": "35",
+        "PLACE_DENSITY": "0.55",
+    },
+    pdk = "@orfs//flow:sky130hd",
+    sources = {"SDC_FILE": [":training_tile.sdc"]},
+    verilog_files = [":training_tile.v"],
+)
+
+orfs_gds(
+    name = "training_tile_gds",
+    klayout = ":klayout_local",
+    src = ":training_tile_final",
+)
