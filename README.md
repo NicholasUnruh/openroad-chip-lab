@@ -8,6 +8,13 @@ make synth
 make layout
 ```
 
-The first design is an 8-bit multiply-accumulate core. See its [interface contract](docs/mac8.md), [setup](docs/setup.md), [learning path](docs/learning-path.md), and [physical flow](docs/physical-flow.md).
+The first design is an 8-bit multiply-accumulate core.
+
+| Guide | Purpose |
+| --- | --- |
+| [Setup](docs/setup.md) | Tools and first build |
+| [MAC8 interface](docs/mac8.md) | RTL behavior |
+| [Learning path](docs/learning-path.md) | Fundamentals and exercises |
+| [Physical flow](docs/physical-flow.md) | Layout, results, fabrication gates |
 
 **Fabrication gate:** the layout is a core. A chip needs IO, power, foundry DRC/LVS and signoff before fabrication.
