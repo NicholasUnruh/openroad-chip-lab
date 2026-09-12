@@ -1,0 +1,24 @@
+load("//:openroad.bzl", "orfs_flow", "orfs_gds")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+sh_binary(
+    name = "klayout_local",
+    srcs = ["klayout_local.sh"],
+)
+
+orfs_flow(
+    name = "mac8",
+    arguments = {
+        "CORE_UTILIZATION": "35",
+        "PLACE_DENSITY": "0.55",
+    },
+    pdk = "@orfs//flow:sky130hd",
+    sources = {"SDC_FILE": [":constraints.sdc"]},
+    verilog_files = [":mac8.v"],
+)
+
+orfs_gds(
+    name = "mac8_gds",
+    klayout = ":klayout_local",
+    src = ":mac8_final",
+)
