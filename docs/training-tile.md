@@ -3,9 +3,9 @@
 `training_tile` is a synthesizable 4×4 matrix engine: one FP32 fused multiply-add unit, three 16-word register banks, and a hardware sequencer. It computes `C = op(A) × op(B) + C` in 64 compute clocks. This is a training compute prototype; the host supplies data and schedules operations.
 
 ```sh
-make sim-training
-make sim-training-netlist
-make layout-training
+make sim-training TRAINING_TOP=training_tile
+make sim-training-netlist TRAINING_TOP=training_tile
+make layout-training TRAINING_TOP=training_tile
 klayout build/layout-training/training_tile.gds
 ```
 
@@ -44,4 +44,4 @@ See [verified numerical and physical results](training-results.md) and [fabricat
 
 ## Next milestones
 
-The [four-lane successor](training-v2.md) pipelines the FMA and preserves this interface. Further milestones are SRAM-backed tile reuse and BF16 operands with FP32 accumulation. Full-model execution also needs larger-matrix scheduling, nonlinear operations, memory movement and software integration.
+The [four-lane successor](training-v2.md) pipelines the FMA. The default [BF16 accelerator](training-v3.md) adds native BF16 operands/multipliers, FP32 accumulation and overlapping buffer transfers. SRAM, nonlinear operations and full-model software integration remain future work.

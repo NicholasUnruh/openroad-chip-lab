@@ -33,7 +33,7 @@ At estimated maxima, streamed projections are 30.81 versus 125.88 MFLOPS: **4.09
 
 ## Evidence and reproduction
 
-Run the [V2 commands](training-v2.md) and corresponding scalar targets without `-v2`. Simulation evidence: `build/training_v2_sim.log`, `build/training_v2_netlist_sim.log`, `build/training_baseline_compare.log`, `build/training_baseline_netlist_compare.log`. Exact cycle/traffic comparison: `build/training_v2_comparison.json`. Generic V2 synthesis: 36,884 cells and zero structural problems in `build/training-v2_synth.log`.
+Run the [V2 commands](training-v2.md) and [explicit scalar targets](training-results.md#reproduce); generic training commands now select [BF16 V3](training-v3.md). Simulation evidence: `build/training_v2_sim.log`, `build/training_v2_netlist_sim.log`, `build/training_baseline_compare.log`, `build/training_baseline_netlist_compare.log`. Exact cycle/traffic comparison: `build/training_v2_comparison.json`. Historical V2 synthesis: 36,884 cells and zero structural problems.
 
 The physical run reuses `ORFS_TOOL_DIR=/tmp/bazel-orfs-inspect`, pinned to bazel-orfs `a25cf9abcdc753b25e5e2d28487844556d8e6db2`, matching the default checkout. Its log is `build/training_v2_layout.log`.
 

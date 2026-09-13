@@ -21,9 +21,9 @@ The timing report estimates 27.20 MHz maximum under this model; only the 10 MHz 
 ## Reproduce
 
 ```sh
-make sim-training
-make sim-training-netlist
-make layout-training
+make sim-training TRAINING_TOP=training_tile
+make sim-training-netlist TRAINING_TOP=training_tile
+make layout-training TRAINING_TOP=training_tile
 ```
 
 The recorded physical run reused `ORFS_TOOL_DIR=/tmp/bazel-orfs-inspect`, whose checkout matches the default pinned bazel-orfs commit `a25cf9abcdc753b25e5e2d28487844556d8e6db2`. The default persistent checkout requires its own first build; the temporary cache is optional.
