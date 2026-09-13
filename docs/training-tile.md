@@ -44,4 +44,4 @@ See [verified numerical and physical results](training-results.md) and [fabricat
 
 ## Next milestones
 
-Pipeline the FMA, add parallel lanes and SRAM-backed tile reuse, and evaluate BF16 operands with FP32 accumulation against this baseline. Full-model execution also needs larger-matrix scheduling, nonlinear operations, memory movement and software integration.
+The [four-lane successor](training-v2.md) pipelines the FMA and preserves this interface. Further milestones are SRAM-backed tile reuse and BF16 operands with FP32 accumulation. Full-model execution also needs larger-matrix scheduling, nonlinear operations, memory movement and software integration.
