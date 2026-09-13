@@ -71,9 +71,15 @@ layout-training-v3:
 check-training-v3-structure:
 	$(MAKE) check-training-structure TRAINING_TOP=training_tile_v3
 
-.PHONY: sim-training-v4 synth-training-v4 sim-training-v4-netlist layout-training-v4 check-training-v4-structure check-training-structure
+.PHONY: sim-training-v4 synth-training-v4 sim-training-v4-netlist layout-training-v4 check-training-v4-structure check-training-structure sim-training-v4-walkthrough
 sim-training-v4:
 	$(MAKE) sim-training TRAINING_TOP=training_tile_v4
+sim-training-v4-walkthrough: TRAINING_TOP = training_tile_v4
+sim-training-v4-walkthrough:
+	verilator --binary --timing --trace --timescale 1ns/1ps -j 4 --top-module training_tile_v4_walkthrough \
+		--Mdir build/training-v4-walkthrough-sim $(TRAINING_INCLUDES) \
+		tb/hardfloat.vlt $(TRAINING_RTL) tb/training_tile_v4_walkthrough.sv
+	./build/training-v4-walkthrough-sim/Vtraining_tile_v4_walkthrough
 synth-training-v4:
 	$(MAKE) synth-training TRAINING_TOP=training_tile_v4
 sim-training-v4-netlist:
