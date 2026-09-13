@@ -1,4 +1,11 @@
-#if defined(TILE_V3)
+#if defined(TILE_V4)
+#include "Vtraining_tile_v4.h"
+using Model = Vtraining_tile_v4;
+constexpr unsigned compute_cycles = 67;
+constexpr unsigned lanes = 8;
+constexpr double target_mhz = 40;
+constexpr const char *design_name = "training_tile_v4";
+#elif defined(TILE_V3)
 #include "Vtraining_tile_v3.h"
 using Model = Vtraining_tile_v3;
 constexpr unsigned compute_cycles = 19;
@@ -30,7 +37,14 @@ constexpr const char *design_name = "training_tile";
 #include <stdexcept>
 #include <string>
 
-using Matrix = std::array<float, 16>;
+#ifdef TILE_V4
+constexpr unsigned dimension = 8;
+#else
+constexpr unsigned dimension = 4;
+#endif
+constexpr unsigned elements = dimension * dimension;
+constexpr unsigned tile_flops = 2 * dimension * dimension * dimension;
+using Matrix = std::array<float, elements>;
 
 static uint32_t bits(float value) {
     uint32_t result;
@@ -44,7 +58,7 @@ static float value(uint32_t raw) {
     return result;
 }
 
-#ifdef TILE_V3
+#if defined(TILE_V3) || defined(TILE_V4)
 static float bf16(float x) {
     uint32_t raw = bits(x);
     if ((raw & 0xffffu) == 0) return x;
@@ -66,11 +80,11 @@ static void require(bool condition, const std::string &message) {
 static Matrix reference(const Matrix &a, const Matrix &b, Matrix c,
                         bool ta, bool tb, bool accumulate) {
     if (!accumulate) c.fill(0.0f);
-    for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j)
-            for (int k = 0; k < 4; ++k)
-                c[i * 4 + j] = std::fma(a[ta ? k * 4 + i : i * 4 + k],
-                                       b[tb ? j * 4 + k : k * 4 + j], c[i * 4 + j]);
+    for (int i = 0; i < dimension; ++i)
+        for (int j = 0; j < dimension; ++j)
+            for (int k = 0; k < dimension; ++k)
+                c[i * dimension + j] = std::fma(a[ta ? k * dimension + i : i * dimension + k],
+                                       b[tb ? j * dimension + k : k * dimension + j], c[i * dimension + j]);
     return c;
 }
 
@@ -105,7 +119,7 @@ public:
     }
 
     void reset() {
-#ifdef TILE_V3
+#if defined(TILE_V3) || defined(TILE_V4)
         dut.job_bank = 0;
         dut.host_bank = 0;
 #endif
@@ -120,9 +134,9 @@ public:
     void load_bank(unsigned bank, const Matrix &matrix) {
         require(!dut.busy, "load while busy");
         dut.write_enable = 1u << bank;
-        for (unsigned i = 0; i < 16; ++i) {
+        for (unsigned i = 0; i < elements; ++i) {
             dut.write_addr = i;
-#ifdef TILE_V3
+#if defined(TILE_V3) || defined(TILE_V4)
             if (bank < 2) {
                 dut.write_data = (bits(bf16(matrix[i])) >> 16) |
                                  (bits(bf16(matrix[i + 1])) & 0xffff0000u);
@@ -157,7 +171,7 @@ public:
 
     Matrix read(bool clocked = false) {
         Matrix out;
-        for (unsigned i = 0; i < 16; ++i) {
+        for (unsigned i = 0; i < elements; ++i) {
             dut.read_addr = i;
             if (clocked) {
                 tick();
@@ -173,7 +187,7 @@ public:
             bool poison = hostile && (cycle < 8 || cycle >= compute_cycles - 3);
             dut.start = poison;
             dut.write_enable = poison ? 7 : 0;
-            dut.write_addr = cycle % 16;
+            dut.write_addr = cycle % elements;
             dut.write_data = 0x7fc00000;
             tick();
             require(bool(dut.done) == (cycle == compute_cycles - 1), "completion cycle");
@@ -198,7 +212,7 @@ public:
         dut.transpose_b = !tb;
         dut.accumulate = !accumulate;
         Matrix out = finish(true);
-#ifdef TILE_V3
+#if defined(TILE_V3) || defined(TILE_V4)
         compare(out, reference(bf16_matrix(a), bf16_matrix(b), c, ta, tb, accumulate), "BF16 matrix reference");
 #else
         compare(out, reference(a, b, c, ta, tb, accumulate), "matrix reference");
@@ -256,7 +270,7 @@ static void arithmetic_tests(Tile &tile) {
 
 static void protocol_tests(Tile &tile) {
     Matrix a{}, b{}, c{};
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < elements; ++i) {
         a[i] = float(i - 8) / 4;
         b[i] = float(i + 1) / 8;
         c[i] = 2;
@@ -291,7 +305,7 @@ static void protocol_tests(Tile &tile) {
 
 static double loss(const Matrix &prediction, const Matrix &target) {
     double sum = 0;
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < elements; ++i) {
         double diff = double(prediction[i]) - target[i];
         sum += 0.5 * diff * diff;
     }
@@ -302,7 +316,7 @@ static void training_test(Tile &tile) {
     Matrix x{1, 0.25f, 0, 0, 0, 1, -0.25f, 0,
              0, 0, 1, 0.25f, -0.25f, 0, 0, 1};
     Matrix target_weights, weights{};
-    for (int i = 0; i < 16; ++i) target_weights[i] = float(i - 7) / 8;
+    for (int i = 0; i < elements; ++i) target_weights[i] = float(i - 7) / 8;
     Matrix target = reference(x, target_weights, {}, false, false, false);
     Matrix step{};
     for (int i = 0; i < 4; ++i) step[5 * i] = -0.125f;
@@ -315,13 +329,13 @@ static void training_test(Tile &tile) {
         previous = current;
         if (epoch == 32) break;
         Matrix dy;
-        for (int i = 0; i < 16; ++i) dy[i] = y[i] - target[i];
+        for (int i = 0; i < elements; ++i) dy[i] = y[i] - target[i];
         Matrix dw = tile.run(x, dy, {}, true, false);
         Matrix dx = tile.run(dy, weights, {}, false, true);
         // Check the gradient formula independently of the FMA reference loop.
         if (epoch == 1) {
             constexpr float epsilon = 1.0f / 1024;
-            for (int i = 0; i < 16; ++i) {
+            for (int i = 0; i < elements; ++i) {
                 Matrix plus = weights, minus = weights;
                 plus[i] += epsilon; minus[i] -= epsilon;
                 double numerical = (loss(reference(x, plus, {}, false, false, false), target) -
@@ -343,7 +357,7 @@ static void training_test(Tile &tile) {
 
 static void benchmark(Tile &tile) {
     Matrix a, b, c;
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < elements; ++i) {
         a[i] = float(i - 8) / 16;
         b[i] = float(i + 1) / 32;
         c[i] = 0.25f;
@@ -380,21 +394,22 @@ static void benchmark(Tile &tile) {
     }
 }
 
-#ifdef TILE_V3
-#include "training_v3_tests.h"
+#if defined(TILE_V3) || defined(TILE_V4)
+#include "bf16_tile_tests.h"
 #endif
 
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     try {
         Tile tile;
-#ifdef TILE_V3
+#if defined(TILE_V3) || defined(TILE_V4)
         bf16_tests(tile);
         protocol_tests(tile);
         buffered_tests(tile);
         bf16_training_test(tile);
         larger_matrix_test(tile);
         streaming_benchmark(tile);
+        streamed_gemm8_benchmark(tile);
 #else
         arithmetic_tests(tile);
         protocol_tests(tile);

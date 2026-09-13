@@ -76,3 +76,22 @@ orfs_gds(
     klayout = ":klayout_local",
     src = ":training_tile_v3_final",
 )
+
+orfs_flow(
+    name = "training_tile_v4",
+    arguments = {
+        "CAP_MARGIN": "10",
+        "CORE_UTILIZATION": "35",
+        "PLACE_DENSITY": "0.55",
+        "SLEW_MARGIN": "10",
+    },
+    pdk = "@orfs//flow:sky130hd",
+    sources = {"SDC_FILE": [":training_tile_v4.sdc"]},
+    verilog_files = [":training_tile_v4.v"],
+)
+
+orfs_gds(
+    name = "training_tile_v4_gds",
+    klayout = ":klayout_local",
+    src = ":training_tile_v4_final",
+)
