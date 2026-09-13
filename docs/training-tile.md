@@ -44,4 +44,4 @@ See [verified numerical and physical results](training-results.md) and [fabricat
 
 ## Next milestones
 
-The [four-lane successor](training-v2.md) pipelines the FMA. The default [BF16 accelerator](training-v3.md) adds native BF16 operands/multipliers, FP32 accumulation and overlapping buffer transfers. SRAM, nonlinear operations and full-model software integration remain future work.
+The [four-lane successor](training-v2.md) pipelines the FMA. The default [BF16 accelerator](training-v4.md) adds eight native BF16 lanes, FP32 accumulation, banked operands and overlapping buffer transfers. SRAM, nonlinear operations and full-model software integration remain future work.

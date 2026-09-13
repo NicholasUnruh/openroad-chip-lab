@@ -1,9 +1,9 @@
 # Native BF16 training accelerator
 
-`training_tile_v3` is the default training target: four BF16×BF16 lanes with fused FP32 accumulation, a 4×4 sequencer, and two independently selectable matrix buffers. Each job takes 19 compute clocks; host transfers can overlap computation.
+`training_tile_v3` is the compact BF16 baseline: four BF16×BF16 lanes with fused FP32 accumulation, a 4×4 sequencer, and two independently selectable matrix buffers. Each job takes 19 compute clocks; host transfers can overlap computation. The default is now [V4](training-v4.md).
 
 ```sh
-make sim-training
+make sim-training-v3
 make check-training-v3-structure
 make sim-training-v3-netlist
 make layout-training-v3
