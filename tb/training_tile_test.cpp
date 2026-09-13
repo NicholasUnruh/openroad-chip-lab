@@ -1,4 +1,11 @@
-#ifdef TILE_V2
+#if defined(TILE_V3)
+#include "Vtraining_tile_v3.h"
+using Model = Vtraining_tile_v3;
+constexpr unsigned compute_cycles = 19;
+constexpr unsigned lanes = 4;
+constexpr double target_mhz = 40;
+constexpr const char *design_name = "training_tile_v3";
+#elif defined(TILE_V2)
 #include "Vtraining_tile_v2.h"
 using Model = Vtraining_tile_v2;
 constexpr unsigned compute_cycles = 19;
@@ -36,6 +43,21 @@ static float value(uint32_t raw) {
     std::memcpy(&result, &raw, sizeof(result));
     return result;
 }
+
+#ifdef TILE_V3
+static float bf16(float x) {
+    uint32_t raw = bits(x);
+    if ((raw & 0xffffu) == 0) return x;
+    if ((raw & 0x7f800000u) == 0x7f800000u && (raw & 0x7fffffu))
+        return value((raw & 0xffff0000u) | 0x00400000u);
+    return value((raw + 0x7fffu + ((raw >> 16) & 1u)) & 0xffff0000u);
+}
+
+static Matrix bf16_matrix(Matrix matrix) {
+    for (auto &x : matrix) x = bf16(x);
+    return matrix;
+}
+#endif
 
 static void require(bool condition, const std::string &message) {
     if (!condition) throw std::runtime_error(message);
@@ -83,6 +105,10 @@ public:
     }
 
     void reset() {
+#ifdef TILE_V3
+        dut.job_bank = 0;
+        dut.host_bank = 0;
+#endif
         dut.rst = 1;
         dut.start = 0;
         dut.write_enable = 0;
@@ -96,7 +122,17 @@ public:
         dut.write_enable = 1u << bank;
         for (unsigned i = 0; i < 16; ++i) {
             dut.write_addr = i;
+#ifdef TILE_V3
+            if (bank < 2) {
+                dut.write_data = (bits(bf16(matrix[i])) >> 16) |
+                                 (bits(bf16(matrix[i + 1])) & 0xffff0000u);
+                ++i;
+            } else dut.write_data = bits(matrix[i]);
+            dut.eval();
+            require(dut.write_ready, "idle write ready");
+#else
             dut.write_data = bits(matrix[i]);
+#endif
             tick();
             written_bytes += 4;
         }
@@ -162,7 +198,11 @@ public:
         dut.transpose_b = !tb;
         dut.accumulate = !accumulate;
         Matrix out = finish(true);
+#ifdef TILE_V3
+        compare(out, reference(bf16_matrix(a), bf16_matrix(b), c, ta, tb, accumulate), "BF16 matrix reference");
+#else
         compare(out, reference(a, b, c, ta, tb, accumulate), "matrix reference");
+#endif
         return out;
     }
 };
@@ -340,14 +380,27 @@ static void benchmark(Tile &tile) {
     }
 }
 
+#ifdef TILE_V3
+#include "training_v3_tests.h"
+#endif
+
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     try {
         Tile tile;
+#ifdef TILE_V3
+        bf16_tests(tile);
+        protocol_tests(tile);
+        buffered_tests(tile);
+        bf16_training_test(tile);
+        larger_matrix_test(tile);
+        streaming_benchmark(tile);
+#else
         arithmetic_tests(tile);
         protocol_tests(tile);
         training_test(tile);
         benchmark(tile);
+#endif
         tile.dut.final();
         std::cout << "PASS: " << design_name << " jobs=" << tile.jobs << '\n';
         return 0;

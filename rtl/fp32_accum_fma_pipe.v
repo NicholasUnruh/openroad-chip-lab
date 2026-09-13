@@ -1,8 +1,11 @@
-module fp32_fma_pipe (
+module fp32_accum_fma_pipe #(
+    parameter BF16_INPUT = 0
+) (
     input wire clk,
     input wire rst,
     input wire in_valid,
-    input wire [31:0] a, b, c,
+    input wire [(BF16_INPUT ? 16 : 32)-1:0] a, b,
+    input wire [31:0] c,
     output wire out_valid,
     output wire [31:0] result,
     output wire [4:0] exception_flags
@@ -14,7 +17,10 @@ module fp32_fma_pipe (
     wire signed [9:0] exponent;
     wire [4:0] align_dist;
     wire [25:0] aligned_c;
-    reg [23:0] a_s1, b_s1;
+    localparam SIG_WIDTH = BF16_INPUT ? 8 : 24;
+    reg [SIG_WIDTH-1:0] a_s1, b_s1;
+    wire [2*SIG_WIDTH-1:0] significand_product = a_s1 * b_s1;
+    wire [31:0] a_fp32, b_fp32;
     reg [47:0] c_s1;
     reg [5:0] state_s1, state_s2;
     reg signed [9:0] exponent_s1, exponent_s2;
@@ -29,8 +35,15 @@ module fp32_fma_pipe (
     reg [26:0] sig_s3;
     reg [2:0] valid;
 
-    fNToRecFN #(8, 24) convert_a (.in(a), .out(ar));
-    fNToRecFN #(8, 24) convert_b (.in(b), .out(br));
+    generate if (BF16_INPUT) begin: bf16
+        assign a_fp32 = {a, 16'b0};
+        assign b_fp32 = {b, 16'b0};
+    end else begin: fp32
+        assign a_fp32 = a;
+        assign b_fp32 = b;
+    end endgenerate
+    fNToRecFN #(8, 24) convert_a (.in(a_fp32), .out(ar));
+    fNToRecFN #(8, 24) convert_b (.in(b_fp32), .out(br));
     fNToRecFN #(8, 24) convert_c (.in(c), .out(cr));
     mulAddRecFNToRaw_preMul #(8, 24) pre (
         .control(1'b1), .op(2'b00), .roundingMode(3'b000),
@@ -61,8 +74,9 @@ module fp32_fma_pipe (
         end else begin
             valid <= {valid[1:0], in_valid};
             if (in_valid) begin
-                a_s1 <= mul_a;
-                b_s1 <= mul_b;
+                // BF16 normalized significands have sixteen zero low bits, including subnormals.
+                a_s1 <= mul_a[23:24-SIG_WIDTH];
+                b_s1 <= mul_b[23:24-SIG_WIDTH];
                 c_s1 <= mul_c;
                 state_s1 <= state;
                 exponent_s1 <= exponent;
@@ -70,7 +84,7 @@ module fp32_fma_pipe (
                 aligned_s1 <= aligned_c;
             end
             if (valid[0]) begin
-                product_s2 <= a_s1 * b_s1 + {1'b0, c_s1};
+                product_s2 <= {1'b0, significand_product, {(48-2*SIG_WIDTH){1'b0}}} + {1'b0, c_s1};
                 state_s2 <= state_s1;
                 exponent_s2 <= exponent_s1;
                 align_s2 <= align_s1;

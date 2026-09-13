@@ -1,11 +1,16 @@
 .PHONY: sim synth layout sim-training synth-training sim-training-netlist layout-training
+.DEFAULT_GOAL := sim
 
 HARDFLOAT = third_party/hardfloat
-TRAINING_TOP ?= training_tile
-TRAINING_BUILD = build/training$(if $(filter training_tile_v2,$(TRAINING_TOP)),-v2)
-TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v2,$(TRAINING_TOP)),rtl/fp32_fma_pipe.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
+TRAINING_TOP ?= training_tile_v3
+TRAINING_BUILD = build/$(subst _,-,$(subst training_tile,training,$(TRAINING_TOP)))
+TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v2 training_tile_v3,$(TRAINING_TOP)),rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
 TRAINING_INCLUDES = -I$(HARDFLOAT) -I$(HARDFLOAT)/RISCV
-TRAINING_CFLAGS = -std=c++17 -O2 -fno-fast-math -ffp-contract=off $(if $(filter training_tile_v2,$(TRAINING_TOP)),-DTILE_V2)
+TRAINING_CFLAGS = -std=c++17 -O2 -fno-fast-math -ffp-contract=off $(if $(filter training_tile_v2,$(TRAINING_TOP)),-DTILE_V2) $(if $(filter training_tile_v3,$(TRAINING_TOP)),-DTILE_V3)
+
+ifeq ($(TRAINING_TOP),training_tile_v3)
+sim-training synth-training: check-training-v3-structure
+endif
 
 sim:
 	mkdir -p build
@@ -49,3 +54,18 @@ sim-training-v2-netlist:
 	$(MAKE) sim-training-netlist TRAINING_TOP=training_tile_v2
 layout-training-v2:
 	$(MAKE) layout-training TRAINING_TOP=training_tile_v2
+
+.PHONY: sim-training-v3 synth-training-v3 sim-training-v3-netlist layout-training-v3 check-training-v3-structure
+sim-training-v3:
+	$(MAKE) sim-training TRAINING_TOP=training_tile_v3
+synth-training-v3:
+	$(MAKE) synth-training TRAINING_TOP=training_tile_v3
+sim-training-v3-netlist:
+	$(MAKE) sim-training-netlist TRAINING_TOP=training_tile_v3
+layout-training-v3:
+	$(MAKE) layout-training TRAINING_TOP=training_tile_v3
+
+check-training-v3-structure:
+	mkdir -p build
+	yosys -Q -T -l build/training_v3_structure.log -p 'read_verilog $(TRAINING_INCLUDES) rtl/training_tile_v3.v rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v; hierarchy -top training_tile_v3; proc; flatten; opt; wreduce; opt_clean; write_json build/training_v3_structure.json'
+	python3 tb/check_bf16_structure.py build/training_v3_structure.json
