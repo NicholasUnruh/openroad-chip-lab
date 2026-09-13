@@ -14,6 +14,7 @@ The introductory 8-bit multiply-accumulate core remains available through `make 
 | --- | --- |
 | [Setup](docs/setup.md) | Tools and first build |
 | [BF16 accelerator](docs/training-v4.md) | Native arithmetic, buffer protocol and commands |
+| [V4 hands-on lab](docs/v4-hands-on.md) | Trace one job in RTL, waveform and layout |
 | [BF16 results](docs/training-v4-results.md) | Verification, transfer benchmarks and physical results |
 | [Compact BF16 baseline](docs/training-v3.md) | Previous four-lane architecture |
 | [Four-lane FP32 baseline](docs/training-v2.md) | Previous architecture |
