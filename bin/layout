@@ -71,7 +71,7 @@ if [ ! -s "$gds_file" ]; then
 fi
 
 mkdir -p "$output_dir"
-for filename in "$design.gds" timing.rpt router_drc.rpt; do
+for filename in "$design.gds" timing.rpt router_drc.rpt metrics.json; do
     if [ -L "$output_dir/$filename" ]; then
         printf '%s\n' "Refusing to overwrite a symlink: $filename" >&2
         exit 1
@@ -81,4 +81,5 @@ install -m 0644 "$gds_file" "$output_dir/$design.gds"
 report_dir="$tool_dir/bazel-bin/chip-lab/reports/sky130hd/$design/base"
 install -m 0644 "$report_dir/6_finish.rpt" "$output_dir/timing.rpt"
 install -m 0644 "$report_dir/5_route_drc.rpt" "$output_dir/router_drc.rpt"
+install -m 0644 "$tool_dir/bazel-bin/chip-lab/logs/sky130hd/$design/base/6_report.json" "$output_dir/metrics.json"
 printf 'GDS: %s\n' "$output_dir/$design.gds"
