@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := sim
 
 HARDFLOAT = third_party/hardfloat
-TRAINING_TOP ?= training_tile_v3
+TRAINING_TOP ?= training_tile_v4
 TRAINING_BUILD = build/$(subst _,-,$(subst training_tile,training,$(TRAINING_TOP)))
 TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v2 training_tile_v3 training_tile_v4,$(TRAINING_TOP)),rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
 TRAINING_INCLUDES = -I$(HARDFLOAT) -I$(HARDFLOAT)/RISCV

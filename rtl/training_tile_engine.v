@@ -25,7 +25,8 @@ module training_tile_engine #(
     reg active_bank;
     wire host = BUFFERED && host_bank;
     wire selected = BUFFERED && job_bank;
-    wire [2*DIM_LOG2:0] host_addr = {host, write_addr};
+    // BF16 readiness rejects odd addresses; expose fixed parity to remove redundant write muxes.
+    wire [2*DIM_LOG2:0] host_addr = {host, write_addr[2*DIM_LOG2-1:1], BF16_INPUT ? 1'b0 : write_addr[0]};
     wire [2*DIM_LOG2:0] host_second_addr = {host, write_addr[2*DIM_LOG2-1:1], 1'b1};
     wire [INPUT_WIDTH-1:0] first_word = write_data[INPUT_WIDTH-1:0];
     wire [INPUT_WIDTH-1:0] second_word = {{(INPUT_WIDTH-16){1'b0}}, write_data[31:16]};
@@ -56,17 +57,46 @@ module training_tile_engine #(
     end
     assign read_data = read_words[read_addr[DIM_LOG2-1:0]];
 
+    wire [INPUT_WIDTH-1:0] b_words [0:DIM-1];
+    genvar bank;
+    generate if (DIM_LOG2 > 2) begin: banked_b
+        // Bank = row XOR column distributes both row and transposed reads across all banks.
+        wire [DIM_LOG2-1:0] host_row = write_addr[2*DIM_LOG2-1:DIM_LOG2];
+        wire [DIM_LOG2-1:0] first_bank = host_row ^ write_addr[DIM_LOG2-1:0];
+        wire [DIM_LOG2:0] write_index = {host, host_row};
+        wire [INPUT_WIDTH-1:0] bank_words [0:DIM-1];
+        for (bank = 0; bank < DIM; bank = bank + 1) begin: banks
+            localparam [DIM_LOG2-1:0] INDEX = bank;
+            reg [INPUT_WIDTH-1:0] mem [0:DIM*BANKS-1];
+            wire [DIM_LOG2-1:0] read_row = trans_b ? INDEX ^ inner : inner;
+            wire [DIM_LOG2:0] read_index = {active_bank, read_row};
+            wire [DIM_LOG2-1:0] lane_bank = inner ^ INDEX;
+            assign bank_words[bank] = mem[read_index[ROW_BITS-1:0]];
+            assign b_words[bank] = bank_words[lane_bank];
+            always @(posedge clk) begin
+                if (write_ready && write_enable[1]) begin
+                    if (BF16_INPUT) begin
+                        if (first_bank[DIM_LOG2-1:1] == INDEX[DIM_LOG2-1:1])
+                            mem[write_index[ROW_BITS-1:0]] <= host_row[0] == INDEX[0] ? first_word : second_word;
+                    end else if (first_bank == INDEX)
+                        mem[write_index[ROW_BITS-1:0]] <= first_word;
+                end
+            end
+        end
+    end endgenerate
+
     genvar lane;
     generate for (lane = 0; lane < DIM; lane = lane + 1) begin: lanes
         localparam [DIM_LOG2-1:0] COL = lane;
         reg [31:0] c_bank [0:DIM*BANKS-1];
         wire [2*DIM_LOG2:0] b_addr = {active_bank, trans_b ? {COL, inner} : {inner, COL}};
+        if (DIM_LOG2 <= 2) assign b_words[lane] = b_mem[b_addr[ADDR_BITS-1:0]];
         wire [31:0] result;
         integer i;
         assign read_words[lane] = c_bank[c_read_addr[ROW_BITS-1:0]];
         fp32_accum_fma_pipe #(.BF16_INPUT(BF16_INPUT)) fma (
             .clk(clk), .rst(rst), .in_valid(busy && issuing),
-            .a(a_mem[a_addr[ADDR_BITS-1:0]]), .b(b_mem[b_addr[ADDR_BITS-1:0]]),
+            .a(a_mem[a_addr[ADDR_BITS-1:0]]), .b(b_words[lane]),
             .c(c_bank[c_issue_addr[ROW_BITS-1:0]]),
             .out_valid(lane_valid[lane]), .result(result), .exception_flags(flags[lane])
         );
@@ -88,7 +118,7 @@ module training_tile_engine #(
                 a_mem[host_addr[ADDR_BITS-1:0]] <= first_word;
                 if (BF16_INPUT) a_mem[host_second_addr[ADDR_BITS-1:0]] <= second_word;
             end
-            if (write_enable[1]) begin
+            if (write_enable[1] && DIM_LOG2 <= 2) begin
                 b_mem[host_addr[ADDR_BITS-1:0]] <= first_word;
                 if (BF16_INPUT) b_mem[host_second_addr[ADDR_BITS-1:0]] <= second_word;
             end

@@ -21,7 +21,11 @@ def check(path, top="training_tile_v3"):
         if widths != (8, 8, 16):
             raise ValueError(f"expected native BF16 8x8 -> 16 multiply, found {widths}")
     memories = module["memories"]
-    expected = {f"engine.{operand}_mem": (16, 2*dimension**2) for operand in ("a", "b")}
+    expected = {"engine.a_mem": (16, 2*dimension**2)}
+    if dimension == 8:
+        expected.update({f"engine.banked_b.banks[{bank}].mem": (16, 2*dimension) for bank in range(dimension)})
+    else:
+        expected["engine.b_mem"] = (16, 2*dimension**2)
     expected.update({f"engine.lanes[{lane}].c_bank": (32, 2*dimension) for lane in range(dimension)})
     actual = {name: (memory["width"], memory["size"]) for name, memory in memories.items()}
     if actual != expected:
