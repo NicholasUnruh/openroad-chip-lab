@@ -22,5 +22,6 @@ The introductory 8-bit multiply-accumulate core remains available through `make 
 | [MAC8 interface](docs/mac8.md) | RTL behavior |
 | [Learning path](docs/learning-path.md) | Fundamentals and exercises |
 | [Physical flow](docs/physical-flow.md) | Layout, results, fabrication gates |
+| [Storage recovery](docs/storage-recovery.md) | Offloaded compiled caches |
 
 **Fabrication gate:** the layout is a core. A chip needs IO, power, foundry DRC/LVS and signoff before fabrication.
