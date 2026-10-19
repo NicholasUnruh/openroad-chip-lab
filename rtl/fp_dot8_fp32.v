@@ -150,44 +150,13 @@ module fp_dot8_fp32 #(
     end
 
     // Stage 4: normalize and round once. The frame LSB has exponent top - 284.
-    reg [35:0] mag;
-    reg [5:0] lead, trailing;
-    reg signed [11:0] shift, exp_field;
-    reg [71:0] shifted;
-    reg [8:0] amount;
-    reg round_bit, sticky, inexact;
-    reg [24:0] sig;
-    reg [31:0] rounded;
-    reg overflow;
-    always @* begin
-        mag = sum_s3[36] ? -sum_s3[35:0] : sum_s3[35:0];
-        lead = 6'd0;
-        trailing = 6'd36;
-        for (k = 0; k < 36; k = k + 1)
-            if (mag[k]) lead = k[5:0];
-        for (k = 35; k >= 0; k = k - 1)
-            if (mag[k]) trailing = k[5:0];
-        // Rounding LSB: 24 significant bits, but never below the 2^-149 subnormal grid.
-        shift = $signed({6'b0, lead}) - 12'sd23;
-        if ($signed(12'sd135) - $signed({3'b0, top_s3}) > shift)
-            shift = $signed(12'sd135) - $signed({3'b0, top_s3});
-        // One right shift of mag * 2^36 covers both directions (shift is -23..133); the
-        // round bit is mag[shift-1] and sticky is any lower set bit.
-        amount = shift[8:0] + 9'd36;
-        shifted = {mag, 36'd0} >> amount;
-        round_bit = shift > 0 && shift <= 12'sd36 && mag[shift[5:0] - 6'd1];
-        sticky = shift > 0 && $signed({6'b0, trailing}) < shift - 12'sd1;
-        inexact = round_bit | sticky | truncated_s3;
-        sig = shifted[24:0] + {24'd0, round_bit && (sticky || shifted[0])};
-        exp_field = shift + $signed({3'b0, top_s3}) - 12'sd134;
-        if (sig[24]) begin
-            sig = sig >> 1;
-            exp_field = exp_field + 12'sd1;
-        end
-        if (!sig[23]) exp_field = 12'sd0;
-        overflow = exp_field >= 12'sd255;
-        rounded = overflow ? {sum_s3[36], 8'hff, 23'd0} : {sum_s3[36], exp_field[7:0], sig[22:0]};
-    end
+    wire [35:0] mag = sum_s3[36] ? -sum_s3[35:0] : sum_s3[35:0];
+    wire [31:0] rounded;
+    wire [4:0] round_flags;
+    fp32_round #(.MW(36)) round_sum (
+        .sign(sum_s3[36]), .mag(mag), .lsb_exp($signed({3'b0, top_s3}) - 12'sd284),
+        .sticky_in(truncated_s3), .result(rounded), .flags(round_flags)
+    );
 
     always @(posedge clk) begin
         if (nan_s3 || invalid_s3) begin
@@ -204,8 +173,7 @@ module fp_dot8_fp32 #(
             exception_flags <= {4'b0, truncated_s3};
         end else begin
             result <= rounded;
-            exception_flags <= {2'b0, overflow, $signed({6'b0, lead}) + $signed({3'b0, top_s3}) < 12'sd158 && inexact,
-                                inexact | overflow};
+            exception_flags <= round_flags;
         end
     end
 endmodule

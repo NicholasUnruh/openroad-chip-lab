@@ -125,22 +125,19 @@ inline Dot8Result dot8_spec(const std::array<uint16_t, 8> &a, const std::array<u
     return {bits, (overflow ? 4u : 0u) | (tiny && inexact ? 2u : 0u) | (inexact ? 1u : 0u), truncated};
 }
 
-// Independent oracle: exact two's-complement sum in 640 bits, then correctly rounded.
-inline Dot8Result dot8_exact(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c,
-                             Dot8Format f = dot8_bf16) {
-    using namespace dot8;
-    Terms t = terms(a, b, c, f);
-    if (t.nan || t.invalid) return {canonical_nan, t.invalid ? 16u : 0u, false};
-    if (t.pos_inf || t.neg_inf) return {t.neg_inf ? 0xff800000u : 0x7f800000u, 0, false};
+namespace dot8 {
+
+// Exact two's-complement sum of finite terms in 640 bits, then correctly rounded to FP32.
+inline Dot8Result exact_round(const Term *begin, const Term *end, bool all_zero, bool all_negative) {
     constexpr int words = 10, offset = 300;  // bit i has weight 2^(i - offset)
     std::array<uint64_t, words> acc{};
-    for (const Term &x : t.term) {
-        if (!x.sig) continue;
+    for (const Term *x = begin; x != end; ++x) {
+        if (!x->sig) continue;
         std::array<uint64_t, words> v{};
-        int pos = x.lsb + offset;
-        v[pos / 64] = uint64_t(x.sig) << (pos % 64);
-        if (pos % 64) v[pos / 64 + 1] = uint64_t(x.sig) >> (64 - pos % 64);
-        if (x.sign) {
+        int pos = x->lsb + offset;
+        v[pos / 64] = uint64_t(x->sig) << (pos % 64);
+        if (pos % 64) v[pos / 64 + 1] = uint64_t(x->sig) >> (64 - pos % 64);
+        if (x->sign) {
             unsigned carry = 1;
             for (auto &w : v) { w = ~w + carry; carry = carry && w == 0; }
         }
@@ -160,7 +157,7 @@ inline Dot8Result dot8_exact(const std::array<uint16_t, 8> &a, const std::array<
     int lead = -1;
     for (int i = words - 1; i >= 0 && lead < 0; --i)
         if (acc[i]) lead = 64 * i + 63 - __builtin_clzll(acc[i]);
-    if (lead < 0) return {t.all_zero && t.all_negative ? 0x80000000u : 0u, 0, false};
+    if (lead < 0) return {all_zero && all_negative ? 0x80000000u : 0u, 0, false};
     // Keep the top 40 bits plus a sticky bit; the remainder only affects stickiness.
     int low = lead - 39 > 0 ? lead - 39 : 0;
     uint64_t mag = 0;
@@ -169,7 +166,19 @@ inline Dot8Result dot8_exact(const std::array<uint16_t, 8> &a, const std::array<
     for (int bit = 0; bit < low; ++bit) rest |= (acc[bit / 64] >> (bit % 64)) & 1;
     mag = mag << 1 | rest;
     bool inexact, tiny;
-    uint32_t bits = dot8::round_fp32(negative, mag, low - offset - 1, inexact, tiny);
+    uint32_t bits = round_fp32(negative, mag, low - offset - 1, inexact, tiny);
     bool overflow = (bits & 0x7fffffffu) == 0x7f800000u;
     return {bits, (overflow ? 4u : 0u) | (tiny && inexact ? 2u : 0u) | (inexact ? 1u : 0u), false};
+}
+
+}  // namespace dot8
+
+// Independent oracle for the dot-product unit: exact sum, then correctly rounded.
+inline Dot8Result dot8_exact(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c,
+                             Dot8Format f = dot8_bf16) {
+    using namespace dot8;
+    Terms t = terms(a, b, c, f);
+    if (t.nan || t.invalid) return {canonical_nan, t.invalid ? 16u : 0u, false};
+    if (t.pos_inf || t.neg_inf) return {t.neg_inf ? 0xff800000u : 0x7f800000u, 0, false};
+    return exact_round(t.term.data(), t.term.data() + t.term.size(), t.all_zero, t.all_negative);
 }

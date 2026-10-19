@@ -170,4 +170,6 @@ orfs_gds(
     "ppa_dot8_e4m3",
     "ppa_dot8_e5m2",
     "ppa_dot8_int8",
+    "ppa_dot32_mxfp8",
+    "ppa_dot32_mxfp4",
 ]]
