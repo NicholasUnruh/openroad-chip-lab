@@ -1,5 +1,5 @@
 // c + sum of eight products of a small float format, rounded once to FP32 (docs/training-v6.md);
-// four-clock latency. FORMAT 0 = BF16, 1 = OCP FP8 E4M3, 2 = OCP FP8 E5M2.
+// five-clock latency. FORMAT 0 = BF16, 1 = OCP FP8 E4M3, 2 = OCP FP8 E5M2.
 // Term tops use t = unbiased top exponent + 252 so every finite term has 2 <= t <= 508.
 module fp_dot8_fp32 #(
     parameter FORMAT = 0
@@ -7,8 +7,8 @@ module fp_dot8_fp32 #(
     input wire clk,
     input wire [8*(FORMAT == 0 ? 16 : 8)-1:0] a, b,
     input wire [31:0] c,
-    output reg [31:0] result,
-    output reg [4:0] exception_flags
+    output wire [31:0] result,
+    output wire [4:0] exception_flags
 );
     localparam EXP = FORMAT == 0 ? 8 : FORMAT == 1 ? 4 : 5;
     localparam MAN = FORMAT == 0 ? 7 : FORMAT == 1 ? 3 : 2;
@@ -164,31 +164,18 @@ module fp_dot8_fp32 #(
         all_negative_s3 <= all_negative_s2;
     end
 
-    // Stage 4: normalize and round once. The frame LSB has exponent top - 284.
+    // Stages 4-5: round once in fp32_round, or pass NaN, infinity or a zero sum.
     wire [35:0] mag = sum_s3[36] ? -sum_s3[35:0] : sum_s3[35:0];
-    wire [31:0] rounded;
-    wire [4:0] round_flags;
+    wire nan_out = nan_s3 || invalid_s3;
+    wire inf_out = pos_inf_s3 || neg_inf_s3;
+    wire special = nan_out || inf_out || all_zero_s3 || sum_s3 == 37'sd0;
+    wire [31:0] special_result = nan_out ? 32'h7fc00000 : inf_out ? {neg_inf_s3, 8'hff, 23'd0} :
+                                 all_zero_s3 ? {all_negative_s3, 31'd0} : 32'd0;
+    wire [4:0] special_flags = nan_out ? {invalid_s3, 4'b0} :
+                               inf_out || all_zero_s3 ? 5'b0 : {4'b0, truncated_s3};
     fp32_round #(.MW(36)) round_sum (
-        .sign(sum_s3[36]), .mag(mag), .lsb_exp($signed({3'b0, top_s3}) - 12'sd284),
-        .sticky_in(truncated_s3), .result(rounded), .flags(round_flags)
+        .clk(clk), .sign(sum_s3[36]), .mag(mag), .lsb_exp($signed({3'b0, top_s3}) - 12'sd284),
+        .sticky_in(truncated_s3), .special(special), .special_result(special_result),
+        .special_flags(special_flags), .result(result), .flags(exception_flags)
     );
-
-    always @(posedge clk) begin
-        if (nan_s3 || invalid_s3) begin
-            result <= 32'h7fc00000;
-            exception_flags <= {invalid_s3, 4'b0};
-        end else if (pos_inf_s3 || neg_inf_s3) begin
-            result <= {neg_inf_s3, 8'hff, 23'd0};
-            exception_flags <= 5'b0;
-        end else if (all_zero_s3) begin
-            result <= {all_negative_s3, 31'd0};
-            exception_flags <= 5'b0;
-        end else if (sum_s3 == 37'sd0) begin
-            result <= 32'd0;
-            exception_flags <= {4'b0, truncated_s3};
-        end else begin
-            result <= rounded;
-            exception_flags <= round_flags;
-        end
-    end
 endmodule

@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
     try {
         Vfp_dot8_fp32 dut;
         std::mt19937 rng(20261019);
-        constexpr unsigned latency = 4, per_kind = 600000, kinds = 7;
+        constexpr unsigned latency = 5, per_kind = 600000, kinds = 7;
         std::deque<std::pair<Vector, Dot8Result>> in_flight;
         uint64_t checked = 0, oracle_checked = 0, truncated = 0;
         std::array<unsigned, 32> flag_counts{};

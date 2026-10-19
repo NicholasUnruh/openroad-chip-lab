@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
     try {
         Vmx_dot32_fp32 dut;
         std::mt19937 rng(20261019);
-        constexpr unsigned latency = 5, per_kind = 300000, kinds = 7;
+        constexpr unsigned latency = 6, per_kind = 300000, kinds = 7;
         std::deque<std::pair<Vector, Dot8Result>> in_flight;
         std::array<unsigned, 32> flag_counts{};
         unsigned checked = 0;

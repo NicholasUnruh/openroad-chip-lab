@@ -78,10 +78,11 @@ module training_tile_v6 (
     reg [3:0] run_tile, run_cycle;
     wire [2:0] issue_row = run_cycle[3:1];
     wire issue_half = run_cycle[0];
-    // Pipeline control matching the four-clock dot-product latency.
-    reg [3:0] p_valid, p_last, p_cbank, p_half;
-    reg [11:0] p_row;
-    reg [15:0] p_tile;
+    // Pipeline control matching the dot-product latency.
+    localparam LAT = 5;
+    reg [LAT-1:0] p_valid, p_last, p_cbank, p_half;
+    reg [3*LAT-1:0] p_row;
+    reg [4*LAT-1:0] p_tile;
 
     reg [1:0] pending;
     reg oldest;
@@ -89,7 +90,7 @@ module training_tile_v6 (
     assign result_valid = |pending;
     assign result_tile = oldest ? drain_tile1 : drain_tile0;
     wire pop = result_ack && result_valid;
-    wire [1:0] push = p_valid[3] && p_last[3] ? 2'b01 << p_cbank[3] : 2'b00;
+    wire [1:0] push = p_valid[LAT-1] && p_last[LAT-1] ? 2'b01 << p_cbank[LAT-1] : 2'b00;
     wire [1:0] pending_next = (pending & ~(pop ? 2'b01 << oldest : 2'b00)) | push;
 
     // Accumulators c_reg[unit][{bank, row, half}]: unit u owns columns u and u+4.
@@ -148,13 +149,13 @@ module training_tile_v6 (
     always @(posedge clk) begin
         for (u = 0; u < 4; u = u + 1)
             for (e = 0; e < 32; e = e + 1)
-                if (p_valid[3] && {p_cbank[3], p_row[11:9], p_half[3]} == e[4:0])
+                if (p_valid[LAT-1] && {p_cbank[LAT-1], p_row[3*LAT-1 -: 3], p_half[LAT-1]} == e[4:0])
                     c_reg[(u*32+e)*32 +: 32] <= unit_result[32*u +: 32];
-        p_row <= {p_row[8:0], issue_row};
-        p_tile <= {p_tile[11:0], run_tile};
-        p_last <= {p_last[2:0], run_last && run_cycle == 4'd15};
-        p_cbank <= {p_cbank[2:0], run_cbank};
-        p_half <= {p_half[2:0], issue_half};
+        p_row <= {p_row[3*LAT-4:0], issue_row};
+        p_tile <= {p_tile[4*LAT-5:0], run_tile};
+        p_last <= {p_last[LAT-2:0], run_last && run_cycle == 4'd15};
+        p_cbank <= {p_cbank[LAT-2:0], run_cbank};
+        p_half <= {p_half[LAT-2:0], issue_half};
         if (rst) begin
             gemm_busy <= 1'b0;
             gemm_done <= 1'b0;
@@ -165,12 +166,12 @@ module training_tile_v6 (
             loaded <= 1'b0;
             wr_valid <= 1'b0;
             run_active <= 1'b0;
-            p_valid <= 4'b0;
+            p_valid <= {LAT{1'b0}};
             pending <= 2'b0;
             oldest <= 1'b0;
         end else begin
             gemm_done <= 1'b0;
-            p_valid <= {p_valid[2:0], run_active};
+            p_valid <= {p_valid[LAT-2:0], run_active};
             if (!gemm_busy) begin
                 if (gemm_start) begin
                     gemm_busy <= 1'b1;
@@ -242,11 +243,11 @@ module training_tile_v6 (
                 run_tile <= nxt_tile;
             end
 
-            if (p_valid[3])
+            if (p_valid[LAT-1])
                 exception_flags <= exception_flags | unit_flags[4:0] | unit_flags[9:5] |
                                    unit_flags[14:10] | unit_flags[19:15];
-            if (push[0]) drain_tile0 <= p_tile[15:12];
-            if (push[1]) drain_tile1 <= p_tile[15:12];
+            if (push[0]) drain_tile0 <= p_tile[4*LAT-1 -: 4];
+            if (push[1]) drain_tile1 <= p_tile[4*LAT-1 -: 4];
             pending <= pending_next;
             if (pending_next == 2'b01 || pending_next == 2'b10) oldest <= pending_next[1];
         end

@@ -1,5 +1,5 @@
 // OCP MX block dot product: correctly rounded c + 2^(sa + sb - 254) * sum of 32 element products
-// (docs/numerics-study.md); five-clock latency. ELEM 0 = FP8 E4M3, 1 = FP4 E2M1.
+// (docs/numerics-study.md); six-clock latency. ELEM 0 = FP8 E4M3, 1 = FP4 E2M1.
 // Element exponents are small, so the 32 products add exactly in fixed point; only the final
 // addition of the block sum to c aligns, keeping dropped bits as a sticky LSB.
 module mx_dot32_fp32 #(
@@ -9,8 +9,8 @@ module mx_dot32_fp32 #(
     input wire [32*(ELEM == 0 ? 8 : 4)-1:0] a, b,
     input wire [7:0] scale_a, scale_b,
     input wire [31:0] c,
-    output reg [31:0] result,
-    output reg [4:0] exception_flags
+    output wire [31:0] result,
+    output wire [4:0] exception_flags
 );
     localparam EXP = ELEM == 0 ? 4 : 2;
     localparam MAN = ELEM == 0 ? 3 : 1;
@@ -161,30 +161,14 @@ module mx_dot32_fp32 #(
         all_negative_s4 <= all_negative_s3;
     end
 
-    // Stage 5: round once.
+    // Stages 5-6: round once in fp32_round, or pass NaN, infinity or a zero sum.
     wire [WF:0] mag = frame_s4[WF+1] ? -frame_s4[WF:0] : frame_s4[WF:0];
-    wire [31:0] rounded;
-    wire [4:0] round_flags;
+    wire special = nan_s4 || inf_s4 || all_zero_s4 || frame_s4 == 0;
+    wire [31:0] special_result = nan_s4 ? 32'h7fc00000 : inf_s4 ? {inf_sign_s4, 8'hff, 23'd0} :
+                                 all_zero_s4 ? {all_negative_s4, 31'd0} : 32'd0;
     fp32_round #(.MW(WF+1)) round_sum (
-        .sign(frame_s4[WF+1]), .mag(mag), .lsb_exp(lsb_s4), .sticky_in(1'b0),
-        .result(rounded), .flags(round_flags)
+        .clk(clk), .sign(frame_s4[WF+1]), .mag(mag), .lsb_exp(lsb_s4), .sticky_in(1'b0),
+        .special(special), .special_result(special_result), .special_flags({nan_s4 && invalid_s4, 4'b0}),
+        .result(result), .flags(exception_flags)
     );
-    always @(posedge clk) begin
-        if (nan_s4) begin
-            result <= 32'h7fc00000;
-            exception_flags <= {invalid_s4, 4'b0};
-        end else if (inf_s4) begin
-            result <= {inf_sign_s4, 8'hff, 23'd0};
-            exception_flags <= 5'b0;
-        end else if (all_zero_s4) begin
-            result <= {all_negative_s4, 31'd0};
-            exception_flags <= 5'b0;
-        end else if (frame_s4 == 0) begin
-            result <= 32'd0;
-            exception_flags <= 5'b0;
-        end else begin
-            result <= rounded;
-            exception_flags <= round_flags;
-        end
-    end
 endmodule
