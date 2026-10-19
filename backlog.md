@@ -1,10 +1,14 @@
 # Backlog
 
 ## In flight
-- [ ] training_tile_v5 - Add 4 KB SRAM scratchpad and on-chip GEMM sequencer in front of the V4 engine (repo: openroad-chip-lab) (started 2026-10-18)
-  Replacing V4 flop buffers with OpenRAM macros was rejected: C bandwidth alone needs ~1.27M um2 of macros. V5 keeps the V4 tile as the register level and adds one sky130_sram_1rw1r_128x256_8. RTL and generic netlist pass 467 GEMMs (all 64 shapes x 4 transpose modes, raw encodings, flags, aborts, slow drains, training); 7 mutants checked. Ideal 32-bit port: 32^3 GEMM 5510 clocks/8192 B vs V4 4480/20480 (-60% bytes, +23% clocks). Remaining: SKY130HD layout with custom macro PDN, results doc.
+- [ ] numerics_ppa_asap7 - Rank BF16/FP8/MX/INT8 MAC datapaths by area, fmax, energy and training accuracy at ASAP7 (repo: openroad-chip-lab) (started 2026-10-19)
+  Plan: docs/numerics-study.md. Units verified: fp_dot8_fp32 (BF16, E4M3, E5M2; 4.2M vectors each), mx_dot32_fp32 (MXFP8, MXFP4; 2.1M correctly rounded vectors each), int8_dot8_int32. SKY130 synthesis estimates per MAC: BF16 FMA 28.3k um2, BF16 dot8 8.7k, MXFP8 4.5k, MXFP4 1.7k. Remaining: ASAP7 routed PPA (queued), activity-based energy, GEMM error and training emulation (M4).
 ## Queued
 ## Done
+- [x] training_tile_v6 - Fused BF16 dot-product tile behind the V5 scratchpad (repo: openroad-chip-lab) (done 2026-10-19)
+  32 MACs/clk via four 8-term dot-product units; 467 GEMMs pass on RTL and netlist. SKY130HD route at 25 ns: setup +2.80 ns, hold +0.24 ns, zero DRC/DRV, stdcell 749,555 um2 + 722,109 um2 macro. Open defect: 7 antenna nets after 807 diodes. 32^3 GEMM 2165 clocks vs V4 4480; per total mm2 equal to V4 at the ideal port because of the SRAM macro. docs/training-v6-results.md.
+- [x] training_tile_v5 - 4 KB SRAM scratchpad and GEMM sequencer in front of the V4 engine (repo: openroad-chip-lab) (done 2026-10-18)
+  RTL and generic netlist pass 467 GEMMs; 32^3 GEMM 5510 clocks / 8192 B vs V4 4480 / 20480 B. Superseded by V6 before its own layout; V6 routing validated the shared macro PDN and placement.
 - [x] training_tile_v4 - Build eight-lane 8x8 BF16 tile and verify operand reuse and physical performance (repo: openroad-chip-lab) (done 2026-09-13)
   Completed against e049ba1: default eight-lane 8x8 native BF16 with FP32 accumulation, XOR-banked B, 61938 generic cells. RTL/netlist each pass 1833 functional/training jobs plus 320 timed jobs; V3 and FP32 regressions pass. Equal-work GEMM achieves 2.29x throughput at the same clock with 33% less host traffic. Final SKY130HD layout passes routing, antenna, setup, hold, slew, capacitance and fanout checks; setup +7.49368 ns and hold +0.33452 ns at 25 ns. V4 25% electrical repair margins resolve the prior extracted-load overload. KLayout verifies training_tile_v4 top, 1358.125 um square GDS; saved source hashes match physical inputs. Standard-cell area 716253 um2, 2.84x recorded V3 area. Results and reproduction: docs/training-v4-results.md. No Git remote configured.
 - [x] training_tile_v3 - Build native BF16 accelerator with buffered transfers and FP32 accumulation (repo: openroad-chip-lab) (done 2026-09-12)

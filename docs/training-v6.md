@@ -38,4 +38,4 @@ NaNs return the canonical `0x7fc00000`. A valid infinity propagates exactly with
 
 Each unit owns output columns `u` and `u+4`. Per clock, one A row is broadcast and each unit reads its B column and accumulator; results write back four clocks later. A job takes 16 clocks; the loader fills the other A/B buffer meanwhile. Two C banks let the host drain a finished tile while the next computes. Output tiles run row-major with K innermost; the first K tile starts from +0.
 
-`tb/dot8_model.h` implements this specification and an exact-sum oracle. Wherever no term is truncated, specification results must equal the correctly rounded exact sum.
+`tb/dot8_model.h` implements this specification and an exact-sum oracle; the unit is `rtl/fp_dot8_fp32.v` with `FORMAT=0`. See [results](training-v6-results.md). Wherever no term is truncated, specification results must equal the correctly rounded exact sum.
