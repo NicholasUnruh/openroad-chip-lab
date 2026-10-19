@@ -2,13 +2,13 @@
 set -eu
 
 if [ "$#" -gt 1 ]; then
-    printf 'error: expected at most one design\nhelp: bin/layout [mac8|training_tile|training_tile_v2|training_tile_v3|training_tile_v4|training_tile_v5]\n'
+    printf 'error: expected at most one design\nhelp: bin/layout [mac8|training_tile|training_tile_v2|training_tile_v3|training_tile_v4|training_tile_v5|training_tile_v6]\n'
     exit 2
 fi
 case "${1:-mac8}" in
-    --help) printf 'usage: bin/layout [mac8|training_tile|training_tile_v2|training_tile_v3|training_tile_v4|training_tile_v5]\ndefault: mac8\nhelp: run make layout-training TRAINING_TOP=<design> to synthesize and route\n'; exit 0 ;;
-    mac8|training_tile|training_tile_v2|training_tile_v3|training_tile_v4|training_tile_v5) design=${1:-mac8} ;;
-    *) printf 'error: unknown design\nhelp: bin/layout [mac8|training_tile|training_tile_v2|training_tile_v3|training_tile_v4|training_tile_v5]\n'; exit 2 ;;
+    --help) printf 'usage: bin/layout [mac8|training_tile|training_tile_v2|training_tile_v3|training_tile_v4|training_tile_v5|training_tile_v6]\ndefault: mac8\nhelp: run make layout-training TRAINING_TOP=<design> to synthesize and route\n'; exit 0 ;;
+    mac8|training_tile|training_tile_v2|training_tile_v3|training_tile_v4|training_tile_v5|training_tile_v6) design=${1:-mac8} ;;
+    *) printf 'error: unknown design\nhelp: bin/layout [mac8|training_tile|training_tile_v2|training_tile_v3|training_tile_v4|training_tile_v5|training_tile_v6]\n'; exit 2 ;;
 esac
 
 lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -28,6 +28,7 @@ if [ "$design" != mac8 ]; then
         training_tile_v3) output_dir="$lab_dir/build/layout-training-v3" ;;
         training_tile_v4) output_dir="$lab_dir/build/layout-training-v4" ;;
         training_tile_v5) output_dir="$lab_dir/build/layout-training-v5" ;;
+        training_tile_v6) output_dir="$lab_dir/build/layout-training-v6" ;;
     esac
     if [ ! -s "$source_file" ]; then
         printf 'error: training netlist is missing\nhelp: run make layout-training TRAINING_TOP=<design> for the selected design\n'
@@ -55,7 +56,7 @@ if [ "$(git -C "$tool_dir" rev-parse HEAD)" != "$tool_commit" ]; then
 fi
 
 mkdir -p "$tool_dir/chip-lab"
-for filename in "$design.v" "$constraint_name" BUILD.bazel klayout_local.sh training_tile_v5_pdn.tcl training_tile_v5_macro.tcl; do
+for filename in "$design.v" "$constraint_name" BUILD.bazel klayout_local.sh scratchpad_pdn.tcl scratchpad_macro.tcl; do
     if [ -L "$tool_dir/chip-lab/$filename" ]; then
         printf '%s\n' "Refusing to overwrite symlink: $tool_dir/chip-lab/$filename" >&2
         exit 1
@@ -64,7 +65,7 @@ done
 cp "$source_file" "$tool_dir/chip-lab/$design.v"
 cp "$constraint_file" "$tool_dir/chip-lab/$constraint_name"
 cp "$lab_dir/tools/orfs/BUILD.bazel" "$tool_dir/chip-lab/BUILD.bazel"
-cp "$lab_dir/tools/orfs/training_tile_v5_pdn.tcl" "$lab_dir/tools/orfs/training_tile_v5_macro.tcl" "$tool_dir/chip-lab/"
+cp "$lab_dir/tools/orfs/scratchpad_pdn.tcl" "$lab_dir/tools/orfs/scratchpad_macro.tcl" "$tool_dir/chip-lab/"
 printf '#!/bin/sh\nexec "%s" "$@"\n' "$klayout_bin" > "$tool_dir/chip-lab/klayout_local.sh"
 chmod +x "$tool_dir/chip-lab/klayout_local.sh"
 

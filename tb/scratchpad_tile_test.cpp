@@ -1,5 +1,15 @@
+#ifdef TILE_V6
+#include "Vtraining_tile_v6.h"
+#include "dot8_model.h"
+using Model = Vtraining_tile_v6;
+constexpr const char *design_name = "training_tile_v6";
+#else
 #include "Vtraining_tile_v5.h"
+using Model = Vtraining_tile_v5;
+constexpr const char *design_name = "training_tile_v5";
+#endif
 #include "verilated.h"
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -12,7 +22,6 @@
 #include <vector>
 
 constexpr double target_mhz = 40;
-constexpr unsigned compute_cycles = 67;
 using Matrix = std::vector<float>;
 
 static uint32_t bits(float value) {
@@ -53,16 +62,31 @@ struct Gemm {
     unsigned b_sp_rows() const { return b_rows() * b_cols() / 8; }
 };
 
+// V5 chains FP32 FMAs in K order; V6 rounds once per 8-term dot product, starting from +0.
 static Matrix reference(const Gemm &g) {
     unsigned rows = 8 * g.m, cols = 8 * g.n, inner = 8 * g.k;
     Matrix c(rows * cols, 0.0f);
     for (unsigned i = 0; i < rows; ++i)
-        for (unsigned j = 0; j < cols; ++j)
+        for (unsigned j = 0; j < cols; ++j) {
+#ifdef TILE_V6
+            uint32_t acc = 0;
+            for (unsigned x0 = 0; x0 < inner; x0 += 8) {
+                std::array<uint16_t, 8> a8, b8;
+                for (unsigned x = 0; x < 8; ++x) {
+                    a8[x] = bits(g.ta ? g.a[(x0 + x) * g.a_cols() + i] : g.a[i * g.a_cols() + x0 + x]) >> 16;
+                    b8[x] = bits(g.tb ? g.b[j * g.b_cols() + x0 + x] : g.b[(x0 + x) * g.b_cols() + j]) >> 16;
+                }
+                acc = dot8_spec(a8, b8, acc).bits;
+            }
+            c[i * cols + j] = value(acc);
+#else
             for (unsigned x = 0; x < inner; ++x) {
                 float a = g.ta ? g.a[x * g.a_cols() + i] : g.a[i * g.a_cols() + x];
                 float b = g.tb ? g.b[j * g.b_cols() + x] : g.b[x * g.b_cols() + j];
                 c[i * cols + j] = std::fma(a, b, c[i * cols + j]);
             }
+#endif
+        }
     return c;
 }
 
@@ -82,7 +106,7 @@ struct HostPolicy { unsigned stall_percent = 0, max_ack_delay = 0; };
 
 class Chip {
 public:
-    Vtraining_tile_v5 dut;
+    Model dut;
     std::mt19937 rng{20261018};
     uint64_t cycles = 0, written_bytes = 0, read_bytes = 0;
     unsigned gemms = 0, jobs = 0;
@@ -373,7 +397,7 @@ static void benchmarks(Chip &chip) {
     uint64_t cycles = chip.cycles - begin, bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     unsigned flops = 2 * 32 * 32 * 32;
     require(bytes == 2 * 32 * 32 * 2 + 32 * 32 * 4, "GEMM32 traffic accounting");
-    std::cout << "BENCH design=training_tile_v5 mode=gemm32_scratchpad cycles=" << cycles << " bytes=" << bytes
+    std::cout << "BENCH design=" << design_name << " mode=gemm32_scratchpad cycles=" << cycles << " bytes=" << bytes
               << " flops=" << flops << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
 
     // Eight 16x16x16 GEMMs: the next operands load into the other scratchpad half while one runs.
@@ -398,7 +422,7 @@ static void benchmarks(Chip &chip) {
     bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     flops = count * 2 * 16 * 16 * 16;
     require(bytes == count * (2 * 16 * 16 * 2 + 16 * 16 * 4), "GEMM16 traffic accounting");
-    std::cout << "BENCH design=training_tile_v5 mode=gemm16_pipelined matrices=" << count << " cycles=" << cycles
+    std::cout << "BENCH design=" << design_name << " mode=gemm16_pipelined matrices=" << count << " cycles=" << cycles
               << " bytes=" << bytes << " flops=" << flops
               << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
 }
@@ -413,7 +437,7 @@ int main(int argc, char **argv) {
         training_test(chip);
         benchmarks(chip);
         chip.dut.final();
-        std::cout << "PASS: training_tile_v5 gemms=" << chip.gemms << " jobs=" << chip.jobs << '\n';
+        std::cout << "PASS: " << design_name << " gemms=" << chip.gemms << " jobs=" << chip.jobs << '\n';
         return 0;
     } catch (const std::exception &error) {
         std::cerr << "FAIL: " << error.what() << '\n';

@@ -113,8 +113,8 @@ orfs_flow(
         "ADDITIONAL_GDS": [SKY130_SRAM + ".gds"],
         "ADDITIONAL_LEFS": [SKY130_SRAM + ".lef"],
         "ADDITIONAL_LIBS": [SKY130_SRAM + "_TT_1p8V_25C.lib"],
-        "MACRO_PLACEMENT_TCL": [":training_tile_v5_macro.tcl"],
-        "PDN_TCL": [":training_tile_v5_pdn.tcl"],
+        "MACRO_PLACEMENT_TCL": [":scratchpad_macro.tcl"],
+        "PDN_TCL": [":scratchpad_pdn.tcl"],
         "SDC_FILE": [":training_tile_v5.sdc"],
     },
     verilog_files = [":training_tile_v5.v"],
@@ -124,4 +124,32 @@ orfs_gds(
     name = "training_tile_v5_gds",
     klayout = ":klayout_local",
     src = ":training_tile_v5_final",
+)
+
+orfs_flow(
+    name = "training_tile_v6",
+    arguments = {
+        "CAP_MARGIN": "25",
+        "CORE_AREA": "10 10 1690 1690",
+        "DIE_AREA": "0 0 1700 1700",
+        "MACRO_PLACE_HALO": "20 20",
+        "PLACE_DENSITY": "0.55",
+        "SLEW_MARGIN": "25",
+    },
+    pdk = "@orfs//flow:sky130hd",
+    sources = {
+        "ADDITIONAL_GDS": [SKY130_SRAM + ".gds"],
+        "ADDITIONAL_LEFS": [SKY130_SRAM + ".lef"],
+        "ADDITIONAL_LIBS": [SKY130_SRAM + "_TT_1p8V_25C.lib"],
+        "MACRO_PLACEMENT_TCL": [":scratchpad_macro.tcl"],
+        "PDN_TCL": [":scratchpad_pdn.tcl"],
+        "SDC_FILE": [":training_tile_v6.sdc"],
+    },
+    verilog_files = [":training_tile_v6.v"],
+)
+
+orfs_gds(
+    name = "training_tile_v6_gds",
+    klayout = ":klayout_local",
+    src = ":training_tile_v6_final",
 )

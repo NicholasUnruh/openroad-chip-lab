@@ -1,6 +1,6 @@
 # SKY130HD platform grid plus straps for the ORFS sky130ram macro, whose supplies are
 # small met3 pads in columns rather than met4 pins. Strap centers are macro-relative
-# (R0) and cover the pad columns listed in docs/training-v5-results.md.
+# (R0) and cover the pad columns listed in docs/training-v6-results.md.
 add_global_connection -net {VDD} -inst_pattern {.*} -pin_pattern {^VDD$} -power
 add_global_connection -net {VDD} -inst_pattern {.*} -pin_pattern {^VDDPE$}
 add_global_connection -net {VDD} -inst_pattern {.*} -pin_pattern {^VDDCE$}
