@@ -1,5 +1,5 @@
 // OCP MX block dot product: correctly rounded c + 2^(sa + sb - 254) * sum of 32 element products
-// (docs/numerics-study.md); four-clock latency. ELEM 0 = FP8 E4M3, 1 = FP4 E2M1.
+// (docs/numerics-study.md); five-clock latency. ELEM 0 = FP8 E4M3, 1 = FP4 E2M1.
 // Element exponents are small, so the 32 products add exactly in fixed point; only the final
 // addition of the block sum to c aligns, keeping dropped bits as a sticky LSB.
 module mx_dot32_fp32 #(
@@ -67,20 +67,23 @@ module mx_dot32_fp32 #(
         all_negative_s1 <= all_negative;
     end
 
-    // Stage 2: exact block sum in fixed point.
-    reg signed [SUMW-1:0] block;
+    // Stage 2: exact block sum in fixed point, as a balanced adder tree.
+    reg [32*SUMW-1:0] level;
+    integer n;
     always @* begin
-        block = 0;
         for (k = 0; k < 32; k = k + 1)
-            block = sign_s1[k] ? block - $signed({{(SUMW-PW){1'b0}}, p_s1[PW*k +: PW]} << shift_s1[SHW*k +: SHW])
-                               : block + $signed({{(SUMW-PW){1'b0}}, p_s1[PW*k +: PW]} << shift_s1[SHW*k +: SHW]);
+            level[SUMW*k +: SUMW] = sign_s1[k] ? -({{(SUMW-PW){1'b0}}, p_s1[PW*k +: PW]} << shift_s1[SHW*k +: SHW])
+                                               : {{(SUMW-PW){1'b0}}, p_s1[PW*k +: PW]} << shift_s1[SHW*k +: SHW];
+        for (n = 16; n > 0; n = n >> 1)
+            for (k = 0; k < n; k = k + 1)
+                level[SUMW*k +: SUMW] = level[SUMW*2*k +: SUMW] + level[SUMW*(2*k+1) +: SUMW];
     end
     reg signed [SUMW-1:0] block_s2;
     reg signed [11:0] block_lsb_s2;
     reg [31:0] c_s2;
     reg nan_s2, all_zero_s2, all_negative_s2;
     always @(posedge clk) begin
-        block_s2 <= block;
+        block_s2 <= level[SUMW-1:0];
         block_lsb_s2 <= scale_s1;
         c_s2 <= c_s1;
         nan_s2 <= nan_s1;
@@ -88,7 +91,7 @@ module mx_dot32_fp32 #(
         all_negative_s2 <= all_negative_s1;
     end
 
-    // Stage 3: normalize the block, align it with c below the larger top, add once.
+    // Stage 3: normalize the block; find the larger top and each operand's distance below it.
     wire [XW-1:0] x_mag = block_s2[SUMW-1] ? -block_s2[XW-1:0] : block_s2[XW-1:0];
     wire [7:0] ec = c_s2[30:23];
     wire [23:0] c_sig = {ec != 8'd0, c_s2[22:0]};
@@ -97,9 +100,6 @@ module mx_dot32_fp32 #(
     reg [5:0] x_lead;
     reg [XW-1:0] x_norm;
     reg signed [11:0] x_top, c_top, top, x_dist, c_dist;
-    reg [WF-1:0] x_just, c_just, x_al, c_al, low_mask;
-    reg signed [WF+1:0] frame;
-    integer x;
     always @* begin
         x_lead = 6'd0;
         for (k = 0; k < XW; k = k + 1)
@@ -108,50 +108,78 @@ module mx_dot32_fp32 #(
         x_top = block_lsb_s2 + $signed({6'b0, x_lead}) + 12'sd1;
         c_top = (ec == 8'd0 ? -12'sd149 : $signed({4'b0, ec}) - 12'sd150) + 12'sd24;
         top = x_mag == 0 ? c_top : c_sig == 24'd0 || x_top > c_top ? x_top : c_top;
-        x_just = {x_norm, {(WF-XW){1'b0}}};
-        c_just = {c_sig, {(WF-24){1'b0}}};
         x_dist = top - x_top;
         c_dist = top - c_top;
-        for (x = 0; x < WF; x = x + 1) low_mask[x] = x < {20'd0, x_dist};
-        x_al = x_dist >= WF ? {{(WF-1){1'b0}}, x_just != 0} : (x_just >> x_dist) | {{(WF-1){1'b0}}, (x_just & low_mask) != 0};
-        for (x = 0; x < WF; x = x + 1) low_mask[x] = x < {20'd0, c_dist};
-        c_al = c_dist >= WF ? {{(WF-1){1'b0}}, c_just != 0} : (c_just >> c_dist) | {{(WF-1){1'b0}}, (c_just & low_mask) != 0};
-        frame = (block_s2[SUMW-1] ? -$signed({2'b0, x_al}) : $signed({2'b0, x_al})) +
-                (c_s2[31] ? -$signed({2'b0, c_al}) : $signed({2'b0, c_al}));
     end
-    reg signed [WF+1:0] frame_s3;
+    reg [XW-1:0] x_norm_s3;
+    reg [23:0] c_sig_s3;
+    reg [6:0] x_dist_s3, c_dist_s3;  // saturated at WF
     reg signed [11:0] lsb_s3;
-    reg nan_s3, invalid_s3, inf_s3, inf_sign_s3, all_zero_s3, all_negative_s3;
+    reg x_sign_s3, c_sign_s3, nan_s3, invalid_s3, inf_s3, all_zero_s3, all_negative_s3;
     always @(posedge clk) begin
-        frame_s3 <= frame;
+        x_norm_s3 <= x_norm;
+        c_sig_s3 <= c_sig;
+        x_dist_s3 <= x_dist >= WF ? WF[6:0] : x_dist[6:0];
+        c_dist_s3 <= c_dist >= WF ? WF[6:0] : c_dist[6:0];
         lsb_s3 <= top - WF;
+        x_sign_s3 <= block_s2[SUMW-1];
+        c_sign_s3 <= c_s2[31];
         nan_s3 <= nan_s2 | c_nan;
         invalid_s3 <= c_nan && !c_s2[22];
         inf_s3 <= c_inf;
-        inf_sign_s3 <= c_s2[31];
         all_zero_s3 <= all_zero_s2 && c_sig == 24'd0;
         all_negative_s3 <= all_negative_s2 && c_s2[31];
     end
 
-    // Stage 4: round once.
-    wire [WF:0] mag = frame_s3[WF+1] ? -frame_s3[WF:0] : frame_s3[WF:0];
+    // Stage 4: align both operands below the top, keeping dropped bits as a sticky LSB; add once.
+    wire [WF-1:0] x_just = {x_norm_s3, {(WF-XW){1'b0}}};
+    wire [WF-1:0] c_just = {c_sig_s3, {(WF-24){1'b0}}};
+    reg [WF-1:0] x_al, c_al, low_mask;
+    reg signed [WF+1:0] frame;
+    integer x;
+    always @* begin
+        for (x = 0; x < WF; x = x + 1) low_mask[x] = x < {25'd0, x_dist_s3};
+        x_al = x_dist_s3 >= WF ? {{(WF-1){1'b0}}, x_just != 0}
+                               : (x_just >> x_dist_s3) | {{(WF-1){1'b0}}, (x_just & low_mask) != 0};
+        for (x = 0; x < WF; x = x + 1) low_mask[x] = x < {25'd0, c_dist_s3};
+        c_al = c_dist_s3 >= WF ? {{(WF-1){1'b0}}, c_just != 0}
+                               : (c_just >> c_dist_s3) | {{(WF-1){1'b0}}, (c_just & low_mask) != 0};
+        frame = (x_sign_s3 ? -$signed({2'b0, x_al}) : $signed({2'b0, x_al})) +
+                (c_sign_s3 ? -$signed({2'b0, c_al}) : $signed({2'b0, c_al}));
+    end
+    reg signed [WF+1:0] frame_s4;
+    reg signed [11:0] lsb_s4;
+    reg nan_s4, invalid_s4, inf_s4, inf_sign_s4, all_zero_s4, all_negative_s4;
+    always @(posedge clk) begin
+        frame_s4 <= frame;
+        lsb_s4 <= lsb_s3;
+        nan_s4 <= nan_s3;
+        invalid_s4 <= invalid_s3;
+        inf_s4 <= inf_s3;
+        inf_sign_s4 <= c_sign_s3;
+        all_zero_s4 <= all_zero_s3;
+        all_negative_s4 <= all_negative_s3;
+    end
+
+    // Stage 5: round once.
+    wire [WF:0] mag = frame_s4[WF+1] ? -frame_s4[WF:0] : frame_s4[WF:0];
     wire [31:0] rounded;
     wire [4:0] round_flags;
     fp32_round #(.MW(WF+1)) round_sum (
-        .sign(frame_s3[WF+1]), .mag(mag), .lsb_exp(lsb_s3), .sticky_in(1'b0),
+        .sign(frame_s4[WF+1]), .mag(mag), .lsb_exp(lsb_s4), .sticky_in(1'b0),
         .result(rounded), .flags(round_flags)
     );
     always @(posedge clk) begin
-        if (nan_s3) begin
+        if (nan_s4) begin
             result <= 32'h7fc00000;
-            exception_flags <= {invalid_s3, 4'b0};
-        end else if (inf_s3) begin
-            result <= {inf_sign_s3, 8'hff, 23'd0};
+            exception_flags <= {invalid_s4, 4'b0};
+        end else if (inf_s4) begin
+            result <= {inf_sign_s4, 8'hff, 23'd0};
             exception_flags <= 5'b0;
-        end else if (all_zero_s3) begin
-            result <= {all_negative_s3, 31'd0};
+        end else if (all_zero_s4) begin
+            result <= {all_negative_s4, 31'd0};
             exception_flags <= 5'b0;
-        end else if (frame_s3 == 0) begin
+        end else if (frame_s4 == 0) begin
             result <= 32'd0;
             exception_flags <= 5'b0;
         end else begin
