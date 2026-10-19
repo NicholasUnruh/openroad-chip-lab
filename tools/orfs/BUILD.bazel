@@ -95,3 +95,33 @@ orfs_gds(
     klayout = ":klayout_local",
     src = ":training_tile_v4_final",
 )
+
+SKY130_SRAM = "@orfs//flow:platforms/sky130ram/sky130_sram_1rw1r_128x256_8/sky130_sram_1rw1r_128x256_8"
+
+orfs_flow(
+    name = "training_tile_v5",
+    arguments = {
+        "CAP_MARGIN": "25",
+        "CORE_AREA": "10 10 1690 1690",
+        "DIE_AREA": "0 0 1700 1700",
+        "MACRO_PLACE_HALO": "20 20",
+        "PLACE_DENSITY": "0.55",
+        "SLEW_MARGIN": "25",
+    },
+    pdk = "@orfs//flow:sky130hd",
+    sources = {
+        "ADDITIONAL_GDS": [SKY130_SRAM + ".gds"],
+        "ADDITIONAL_LEFS": [SKY130_SRAM + ".lef"],
+        "ADDITIONAL_LIBS": [SKY130_SRAM + "_TT_1p8V_25C.lib"],
+        "MACRO_PLACEMENT_TCL": [":training_tile_v5_macro.tcl"],
+        "PDN_TCL": [":training_tile_v5_pdn.tcl"],
+        "SDC_FILE": [":training_tile_v5.sdc"],
+    },
+    verilog_files = [":training_tile_v5.v"],
+)
+
+orfs_gds(
+    name = "training_tile_v5_gds",
+    klayout = ":klayout_local",
+    src = ":training_tile_v5_final",
+)

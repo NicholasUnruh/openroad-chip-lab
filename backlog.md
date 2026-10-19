@@ -1,6 +1,8 @@
 # Backlog
 
 ## In flight
+- [ ] training_tile_v5 - Add 4 KB SRAM scratchpad and on-chip GEMM sequencer in front of the V4 engine (repo: openroad-chip-lab) (started 2026-10-18)
+  Replacing V4 flop buffers with OpenRAM macros was rejected: C bandwidth alone needs ~1.27M um2 of macros. V5 keeps the V4 tile as the register level and adds one sky130_sram_1rw1r_128x256_8. RTL and generic netlist pass 467 GEMMs (all 64 shapes x 4 transpose modes, raw encodings, flags, aborts, slow drains, training); 7 mutants checked. Ideal 32-bit port: 32^3 GEMM 5510 clocks/8192 B vs V4 4480/20480 (-60% bytes, +23% clocks). Remaining: SKY130HD layout with custom macro PDN, results doc.
 ## Queued
 ## Done
 - [x] training_tile_v4 - Build eight-lane 8x8 BF16 tile and verify operand reuse and physical performance (repo: openroad-chip-lab) (done 2026-09-13)

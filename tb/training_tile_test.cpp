@@ -409,7 +409,9 @@ int main(int argc, char **argv) {
         bf16_training_test(tile);
         larger_matrix_test(tile);
         streaming_benchmark(tile);
-        streamed_gemm8_benchmark(tile);
+        streamed_gemm_benchmark<64, 8>(tile);
+        streamed_gemm_benchmark<8, 16>(tile);
+        streamed_gemm_benchmark<1, 32>(tile);
 #else
         arithmetic_tests(tile);
         protocol_tests(tile);

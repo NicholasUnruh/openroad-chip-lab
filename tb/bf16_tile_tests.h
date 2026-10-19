@@ -220,8 +220,9 @@ static void larger_matrix_test(Tile &tile) {
               << " jobs, retained hardware C, padded boundaries\n";
 }
 
-static void streamed_gemm8_benchmark(Tile &tile) {
-    constexpr unsigned count = 64, size = 8, blocks = size / dimension;
+template <unsigned count, unsigned size>
+static void streamed_gemm_benchmark(Tile &tile) {
+    constexpr unsigned blocks = size / dimension;
     static_assert(size % dimension == 0, "benchmark must tile exactly");
     struct Job { Matrix a{}, b{}, expected{}; bool accumulate, final; };
     std::vector<Job> jobs;
@@ -290,7 +291,7 @@ static void streamed_gemm8_benchmark(Tile &tile) {
     constexpr unsigned flops = count * 2 * size * size * size;
     require(cycles == 2 * elements + jobs.size() * (compute_cycles + 1), "GEMM8 cycle accounting");
     require(bytes == jobs.size() * elements * 4 + count * size * size * 4, "GEMM8 traffic accounting");
-    std::cout << "BENCH design=" << design_name << " mode=gemm8_stream matrices=" << count
+    std::cout << "BENCH design=" << design_name << " mode=gemm" << size << "_stream matrices=" << count
               << " jobs=" << jobs.size() << " cycles=" << cycles << " bytes=" << bytes
               << " flops=" << flops << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
     tile.dut.host_bank = tile.dut.job_bank = 0;

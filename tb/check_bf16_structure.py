@@ -3,7 +3,7 @@ import sys
 
 
 def check(path, top="training_tile_v3"):
-    dimension = {"training_tile_v3": 4, "training_tile_v4": 8}[top]
+    dimension = {"training_tile_v3": 4, "training_tile_v4": 8, "training_tile_v5": 8}[top]
     with open(path) as source:
         module = json.load(source)["modules"][top]
     multipliers = [
@@ -30,13 +30,17 @@ def check(path, top="training_tile_v3"):
     actual = {name: (memory["width"], memory["size"]) for name, memory in memories.items()}
     if actual != expected:
         raise ValueError(f"unexpected operand/accumulator storage: {actual}")
+    if top == "training_tile_v5":
+        macros = [cell for cell in module["cells"].values() if cell["type"] == "sky130_sram_1rw1r_128x256_8"]
+        if len(macros) != 1:
+            raise ValueError(f"expected one scratchpad SRAM macro, found {len(macros)}")
     print(f"PASS: {dimension} unsigned 8x8 -> 16 multipliers; BF16 A/B, FP32 C; two {8*dimension**2}-byte banks")
 
 
 if __name__ == "__main__":
     try:
         if len(sys.argv) not in (2, 3):
-            raise ValueError("usage: python3 tb/check_bf16_structure.py <yosys-json> [training_tile_v3|training_tile_v4]")
+            raise ValueError("usage: python3 tb/check_bf16_structure.py <yosys-json> [training_tile_v3|training_tile_v4|training_tile_v5]")
         check(*sys.argv[1:])
     except (ValueError, KeyError, OSError) as error:
         print(f"FAIL: {error}")
