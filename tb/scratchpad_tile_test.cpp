@@ -397,6 +397,10 @@ static void benchmarks(Chip &chip) {
     uint64_t cycles = chip.cycles - begin, bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     unsigned flops = 2 * 32 * 32 * 32;
     require(bytes == 2 * 32 * 32 * 2 + 32 * 32 * 4, "GEMM32 traffic accounting");
+#ifdef TILE_V6
+    // After the 1024-clock fill: 64 back-to-back 16-clock jobs plus fill, drain and handoff latency.
+    require(cycles - 1024 >= 64 * 16 && cycles - 1024 <= 1150, "GEMM32 job throughput");
+#endif
     std::cout << "BENCH design=" << design_name << " mode=gemm32_scratchpad cycles=" << cycles << " bytes=" << bytes
               << " flops=" << flops << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
 

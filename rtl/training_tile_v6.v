@@ -59,17 +59,20 @@ module training_tile_v6 (
         .clk1(clk), .csb1(!load_active), .addr1(sp_row), .dout1(sp_dout)
     );
 
-    // Operands: a_reg[buf][i][k] and b_reg[buf][k][j], 16 bits each, row-major.
+    // Operands: a_reg[buf][i][k] and b_reg[buf][k][j], 16 bits each, row-major. All register
+    // file accesses use constant indices with explicit selects; variable part-selects of these
+    // wide vectors synthesize to barrel shifters.
     reg [2047:0] a_reg, b_reg;
-    integer x, y, u, k;
+    integer bi, x, y, u, k, e;
     always @(posedge clk)
-        for (x = 0; x < 8; x = x + 1)
-            for (y = 0; y < 8; y = y + 1) begin
-                if (wr_valid && wr_a && (ta ? y[2:0] == wr_row : x[2:0] == wr_row))
-                    a_reg[((wr_buf*8+x)*8+y)*16 +: 16] <= sp_dout[16*(ta ? x : y) +: 16];
-                if (wr_valid && !wr_a && (tb ? y[2:0] == wr_row : x[2:0] == wr_row))
-                    b_reg[((wr_buf*8+x)*8+y)*16 +: 16] <= sp_dout[16*(tb ? x : y) +: 16];
-            end
+        for (bi = 0; bi < 2; bi = bi + 1)
+            for (x = 0; x < 8; x = x + 1)
+                for (y = 0; y < 8; y = y + 1) begin
+                    if (wr_valid && wr_a && wr_buf == bi[0] && (ta ? y[2:0] == wr_row : x[2:0] == wr_row))
+                        a_reg[((bi*8+x)*8+y)*16 +: 16] <= ta ? sp_dout[16*x +: 16] : sp_dout[16*y +: 16];
+                    if (wr_valid && !wr_a && wr_buf == bi[0] && (tb ? y[2:0] == wr_row : x[2:0] == wr_row))
+                        b_reg[((bi*8+x)*8+y)*16 +: 16] <= tb ? sp_dout[16*x +: 16] : sp_dout[16*y +: 16];
+                end
 
     reg run_active, run_buf, run_cbank, run_k0, run_last;
     reg [3:0] run_tile, run_cycle;
@@ -91,7 +94,15 @@ module training_tile_v6 (
 
     // Accumulators c_reg[unit][{bank, row, half}]: unit u owns columns u and u+4.
     reg [4095:0] c_reg;
-    assign read_data = c_reg[({read_addr[1:0], oldest, read_addr[5:3], read_addr[2]})*32 +: 32];
+    reg [31:0] host_word;
+    always @* begin
+        host_word = 32'd0;
+        for (u = 0; u < 4; u = u + 1)
+            for (e = 0; e < 32; e = e + 1)
+                if ({25'd0, read_addr[1:0], oldest, read_addr[5:3], read_addr[2]} == u*32 + e)
+                    host_word = c_reg[(u*32+e)*32 +: 32];
+    end
+    assign read_data = host_word;
 
     // Untransposed A row i lands nine rows into the load and is needed 2i clocks into the job;
     // transposed A fills columns, so every row must land first.
@@ -100,31 +111,45 @@ module training_tile_v6 (
     // A later tile reuses a bank only after an intervening 16-clock job, past its last writeback.
     wire eng_start = nxt_valid && nxt_ready && slot_free && !(nxt_k0 && pending[nxt_cbank]);
     // Loads run back to back: the next job's first read follows the previous job's last read.
-    wire load_go = gemm_busy && ld_valid && !nxt_valid && (!load_active || &load_index) &&
-                   !(run_active && run_buf == ld_buf);
+    // Buffers alternate and only one loaded job waits, so the running job never uses ld_buf.
+    wire load_go = gemm_busy && ld_valid && !nxt_valid && (!load_active || &load_index);
 
+    reg [127:0] a_row;
     reg [511:0] unit_b;
     reg [127:0] unit_c;
     wire [127:0] unit_result;
     wire [19:0] unit_flags;
-    always @*
+    always @* begin
+        a_row = 128'd0;
+        for (bi = 0; bi < 2; bi = bi + 1)
+            for (x = 0; x < 8; x = x + 1)
+                if (run_buf == bi[0] && issue_row == x[2:0]) a_row = a_reg[(bi*8+x)*128 +: 128];
+        unit_b = 512'd0;
+        unit_c = 128'd0;
         for (u = 0; u < 4; u = u + 1) begin
-            for (k = 0; k < 8; k = k + 1)
-                unit_b[128*u+16*k +: 16] = b_reg[(((run_buf ? 8 : 0) + k)*8 + u + (issue_half ? 4 : 0))*16 +: 16];
-            unit_c[32*u +: 32] = run_k0 ? 32'd0 : c_reg[(u*32 + {27'd0, run_cbank, issue_row, issue_half})*32 +: 32];
+            for (bi = 0; bi < 2; bi = bi + 1)
+                for (k = 0; k < 8; k = k + 1)
+                    if (run_buf == bi[0])
+                        unit_b[128*u+16*k +: 16] = issue_half ? b_reg[((bi*8+k)*8+u+4)*16 +: 16]
+                                                              : b_reg[((bi*8+k)*8+u)*16 +: 16];
+            for (e = 0; e < 32; e = e + 1)
+                if (!run_k0 && {run_cbank, issue_row, issue_half} == e[4:0])
+                    unit_c[32*u +: 32] = c_reg[(u*32+e)*32 +: 32];
         end
+    end
     genvar g;
     generate for (g = 0; g < 4; g = g + 1) begin: units
         bf16_dot8_fp32 dot (
-            .clk(clk), .a(a_reg[{run_buf, issue_row, 7'd0} +: 128]), .b(unit_b[128*g +: 128]), .c(unit_c[32*g +: 32]),
+            .clk(clk), .a(a_row), .b(unit_b[128*g +: 128]), .c(unit_c[32*g +: 32]),
             .result(unit_result[32*g +: 32]), .exception_flags(unit_flags[5*g +: 5])
         );
     end endgenerate
 
     always @(posedge clk) begin
-        if (p_valid[3])
-            for (u = 0; u < 4; u = u + 1)
-                c_reg[(u*32 + {27'd0, p_cbank[3], p_row[11:9], p_half[3]})*32 +: 32] <= unit_result[32*u +: 32];
+        for (u = 0; u < 4; u = u + 1)
+            for (e = 0; e < 32; e = e + 1)
+                if (p_valid[3] && {p_cbank[3], p_row[11:9], p_half[3]} == e[4:0])
+                    c_reg[(u*32+e)*32 +: 32] <= unit_result[32*u +: 32];
         p_row <= {p_row[8:0], issue_row};
         p_tile <= {p_tile[11:0], run_tile};
         p_last <= {p_last[2:0], run_last && run_cycle == 4'd15};

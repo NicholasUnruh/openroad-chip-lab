@@ -18,7 +18,7 @@ module bf16_dot8_fp32 (
     reg [7:0] ea, eb;
     reg a_zero, b_zero, a_inf, b_inf, a_nan, b_nan, prod_sign;
     reg nan, invalid, pos_inf, neg_inf, all_zero, all_negative;
-    integer k;
+    integer k, x;
     wire [7:0] ec = c[30:23];
     wire c_zero = ec == 8'd0 && c[22:0] == 23'd0;
     wire c_nan = &ec && c[22:0] != 23'd0;
@@ -72,7 +72,7 @@ module bf16_dot8_fp32 (
     // Stage 2: largest top, then left-justify each term in the 32-bit frame and truncate.
     reg [8:0] top;
     reg [9:0] distance;
-    reg [31:0] justified;
+    reg [31:0] justified, low_mask;
     reg [287:0] aligned;
     reg [8:0] term_sign;
     reg truncated;
@@ -85,8 +85,9 @@ module bf16_dot8_fp32 (
             justified = k == 8 ? {c_sig_s1, 8'd0} : {p_s1[16*k +: 16], 16'd0};
             distance = {1'b0, top} - {1'b0, k == 8 ? c_t_s1 : t_s1[9*k +: 9]};
             aligned[32*k +: 32] = distance >= 10'd32 ? 32'd0 : justified >> distance[4:0];
-            truncated = truncated | (distance >= 10'd32 ? justified != 32'd0 :
-                                     (aligned[32*k +: 32] << distance[4:0]) != justified);
+            // Bits below the shift distance are the ones truncated away.
+            for (x = 0; x < 32; x = x + 1) low_mask[x] = {22'd0, distance} > x;
+            truncated = truncated | (justified & low_mask) != 32'd0;
             term_sign[k] = k == 8 ? c_sign_s1 : sign_s1[k];
         end
     end
@@ -134,9 +135,10 @@ module bf16_dot8_fp32 (
 
     // Stage 4: normalize and round once. The frame LSB has exponent top - 284.
     reg [35:0] mag;
-    reg [5:0] lead;
+    reg [5:0] lead, trailing;
     reg signed [11:0] shift, exp_field;
-    reg [35:0] kept, below;
+    reg [71:0] shifted;
+    reg [8:0] amount;
     reg round_bit, sticky, inexact;
     reg [24:0] sig;
     reg [31:0] rounded;
@@ -144,23 +146,23 @@ module bf16_dot8_fp32 (
     always @* begin
         mag = sum_s3[36] ? -sum_s3[35:0] : sum_s3[35:0];
         lead = 6'd0;
+        trailing = 6'd36;
         for (k = 0; k < 36; k = k + 1)
             if (mag[k]) lead = k[5:0];
+        for (k = 35; k >= 0; k = k - 1)
+            if (mag[k]) trailing = k[5:0];
         // Rounding LSB: 24 significant bits, but never below the 2^-149 subnormal grid.
         shift = $signed({6'b0, lead}) - 12'sd23;
         if ($signed(12'sd135) - $signed({3'b0, top_s3}) > shift)
             shift = $signed(12'sd135) - $signed({3'b0, top_s3});
-        kept = 36'd0;
-        below = 36'd0;
-        if (shift <= 0) kept = mag << -shift;
-        else if (shift <= 12'sd36) begin
-            kept = mag >> shift;
-            below = mag << (12'sd36 - shift);
-        end else below = mag;
-        round_bit = shift > 0 && shift <= 12'sd36 && below[35];
-        sticky = shift > 12'sd36 ? mag != 36'd0 : shift > 0 && below[34:0] != 35'd0;
+        // One right shift of mag * 2^36 covers both directions (shift is -23..133); the
+        // round bit is mag[shift-1] and sticky is any lower set bit.
+        amount = shift[8:0] + 9'd36;
+        shifted = {mag, 36'd0} >> amount;
+        round_bit = shift > 0 && shift <= 12'sd36 && mag[shift[5:0] - 6'd1];
+        sticky = shift > 0 && $signed({6'b0, trailing}) < shift - 12'sd1;
         inexact = round_bit | sticky | truncated_s3;
-        sig = kept[24:0] + {24'd0, round_bit && (sticky || kept[0])};
+        sig = shifted[24:0] + {24'd0, round_bit && (sticky || shifted[0])};
         exp_field = shift + $signed({3'b0, top_s3}) - 12'sd134;
         if (sig[24]) begin
             sig = sig >> 1;
