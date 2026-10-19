@@ -79,7 +79,7 @@ module training_tile_v6 (
     wire [2:0] issue_row = run_cycle[3:1];
     wire issue_half = run_cycle[0];
     // Pipeline control matching the dot-product latency.
-    localparam LAT = 5;
+    localparam LAT = 6;
     reg [LAT-1:0] p_valid, p_last, p_cbank, p_half;
     reg [3*LAT-1:0] p_row;
     reg [4*LAT-1:0] p_tile;
