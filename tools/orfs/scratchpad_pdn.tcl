@@ -26,10 +26,12 @@ add_pdn_connect -grid {grid} -layers {met4 met5}
 define_pdn_grid -name {scratchpad} -voltage_domains {CORE} -macro \
   -cells {sky130_sram_1rw1r_128x256_8} -orient {R0} -halo {2.0 2.0 2.0 2.0} -grid_over_boundary
 # {net center width}; the pitch exceeds the macro width so each call makes one strap.
+# Straps are at least 1.6 um wide so met4-met5 vias fit, cover their pad columns fully,
+# extend away from neighbours and keep at least 0.4 um met4 spacing.
 foreach strap {
-  {VSS 160.900 0.690} {VDD 164.105 2.850} {VSS 167.095 0.690} {VDD 168.455 0.690}
-  {VSS 214.465 0.690} {VSS 927.045 0.690} {VDD 973.775 0.690} {VSS 975.135 0.690}
-  {VDD 978.125 2.850} {VSS 981.330 0.690}
+  {VSS 160.300 1.800} {VDD 164.105 2.850} {VSS 166.750 1.600} {VDD 168.800 1.600}
+  {VSS 214.465 1.600} {VSS 927.045 1.600} {VDD 973.250 1.700} {VSS 975.350 1.700}
+  {VDD 978.125 2.850} {VSS 981.850 1.700}
 } {
   lassign $strap net center width
   add_pdn_stripe -grid {scratchpad} -layer {met4} -nets $net -width $width -pitch {2000} -offset $center
