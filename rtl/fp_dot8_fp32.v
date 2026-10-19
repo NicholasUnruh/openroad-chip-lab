@@ -1,21 +1,35 @@
-// c + sum of eight BF16 products, rounded once to FP32 (docs/training-v6.md); four-clock latency.
+// c + sum of eight products of a small float format, rounded once to FP32 (docs/training-v6.md);
+// four-clock latency. FORMAT 0 = BF16, 1 = OCP FP8 E4M3, 2 = OCP FP8 E5M2.
 // Term tops use t = unbiased top exponent + 252 so every finite term has 2 <= t <= 508.
-module bf16_dot8_fp32 (
+module fp_dot8_fp32 #(
+    parameter FORMAT = 0
+) (
     input wire clk,
-    input wire [127:0] a, b,
+    input wire [8*(FORMAT == 0 ? 16 : 8)-1:0] a, b,
     input wire [31:0] c,
     output reg [31:0] result,
     output reg [4:0] exception_flags
 );
+    localparam EXP = FORMAT == 0 ? 8 : FORMAT == 1 ? 4 : 5;
+    localparam MAN = FORMAT == 0 ? 7 : FORMAT == 1 ? 3 : 2;
+    localparam BIAS = (1 << (EXP - 1)) - 1;
+    localparam W = 1 + EXP + MAN;
+    localparam PW = 2 * (MAN + 1);
+    // E4M3 has no infinities and a single NaN mantissa; BF16 and E5M2 follow IEEE 754.
+    localparam IEEE_SPECIALS = FORMAT != 1;
+    // Product top t = ea + eb + T_OFFSET with subnormal exponent fields read as 1.
+    localparam [8:0] T_OFFSET = 252 - 2 * BIAS - 2 * MAN + PW;
+
     // Stage 1: decode, exact significand products and special-value summary.
-    reg [127:0] p_s1;
+    reg [8*PW-1:0] p_s1;
     reg [71:0] t_s1;
     reg [7:0] sign_s1;
     reg [23:0] c_sig_s1;
     reg [8:0] c_t_s1;
     reg c_sign_s1, nan_s1, invalid_s1, pos_inf_s1, neg_inf_s1, all_zero_s1, all_negative_s1;
 
-    reg [7:0] ea, eb;
+    reg [EXP-1:0] ea, eb;
+    reg [MAN-1:0] ma, mb;
     reg a_zero, b_zero, a_inf, b_inf, a_nan, b_nan, prod_sign;
     reg nan, invalid, pos_inf, neg_inf, all_zero, all_negative;
     integer k, x;
@@ -30,17 +44,19 @@ module bf16_dot8_fp32 (
         all_zero = c_zero;
         all_negative = c[31];
         for (k = 0; k < 8; k = k + 1) begin
-            ea = a[16*k+7 +: 8];
-            eb = b[16*k+7 +: 8];
-            a_zero = ea == 8'd0 && a[16*k +: 7] == 7'd0;
-            b_zero = eb == 8'd0 && b[16*k +: 7] == 7'd0;
-            a_inf = &ea && a[16*k +: 7] == 7'd0;
-            b_inf = &eb && b[16*k +: 7] == 7'd0;
-            a_nan = &ea && a[16*k +: 7] != 7'd0;
-            b_nan = &eb && b[16*k +: 7] != 7'd0;
-            prod_sign = a[16*k+15] ^ b[16*k+15];
+            ea = a[W*k+MAN +: EXP];
+            eb = b[W*k+MAN +: EXP];
+            ma = a[W*k +: MAN];
+            mb = b[W*k +: MAN];
+            a_zero = ea == 0 && ma == 0;
+            b_zero = eb == 0 && mb == 0;
+            a_inf = IEEE_SPECIALS && &ea && ma == 0;
+            b_inf = IEEE_SPECIALS && &eb && mb == 0;
+            a_nan = &ea && (IEEE_SPECIALS ? ma != 0 : &ma);
+            b_nan = &eb && (IEEE_SPECIALS ? mb != 0 : &mb);
+            prod_sign = a[W*k+W-1] ^ b[W*k+W-1];
             nan = nan | a_nan | b_nan;
-            invalid = invalid | (a_nan && !a[16*k+6]) | (b_nan && !b[16*k+6]) |
+            invalid = invalid | (IEEE_SPECIALS && a_nan && !ma[MAN-1]) | (IEEE_SPECIALS && b_nan && !mb[MAN-1]) |
                       (a_inf && b_zero) | (b_inf && a_zero);
             if ((a_inf || b_inf) && !a_nan && !b_nan && !a_zero && !b_zero) begin
                 pos_inf = pos_inf | !prod_sign;
@@ -53,10 +69,10 @@ module bf16_dot8_fp32 (
 
     always @(posedge clk) begin
         for (k = 0; k < 8; k = k + 1) begin
-            p_s1[16*k +: 16] <= {a[16*k+7 +: 8] != 8'd0, a[16*k +: 7]} * {b[16*k+7 +: 8] != 8'd0, b[16*k +: 7]};
-            t_s1[9*k +: 9] <= {1'b0, a[16*k+7 +: 8] == 8'd0 ? 8'd1 : a[16*k+7 +: 8]} +
-                       {1'b0, b[16*k+7 +: 8] == 8'd0 ? 8'd1 : b[16*k+7 +: 8]};
-            sign_s1[k] <= a[16*k+15] ^ b[16*k+15];
+            p_s1[PW*k +: PW] <= {a[W*k+MAN +: EXP] != 0, a[W*k +: MAN]} * {b[W*k+MAN +: EXP] != 0, b[W*k +: MAN]};
+            t_s1[9*k +: 9] <= (a[W*k+MAN +: EXP] == 0 ? 9'd1 : {{(9-EXP){1'b0}}, a[W*k+MAN +: EXP]}) +
+                              (b[W*k+MAN +: EXP] == 0 ? 9'd1 : {{(9-EXP){1'b0}}, b[W*k+MAN +: EXP]}) + T_OFFSET;
+            sign_s1[k] <= a[W*k+W-1] ^ b[W*k+W-1];
         end
         c_sig_s1 <= {ec != 8'd0, c[22:0]};
         c_t_s1 <= {1'b0, ec == 8'd0 ? 8'd1 : ec} + 9'd126;
@@ -79,10 +95,10 @@ module bf16_dot8_fp32 (
     always @* begin
         top = c_sig_s1 != 24'd0 ? c_t_s1 : 9'd0;
         for (k = 0; k < 8; k = k + 1)
-            if (p_s1[16*k +: 16] != 16'd0 && t_s1[9*k +: 9] > top) top = t_s1[9*k +: 9];
+            if (p_s1[PW*k +: PW] != 0 && t_s1[9*k +: 9] > top) top = t_s1[9*k +: 9];
         truncated = 1'b0;
         for (k = 0; k < 9; k = k + 1) begin
-            justified = k == 8 ? {c_sig_s1, 8'd0} : {p_s1[16*k +: 16], 16'd0};
+            justified = k == 8 ? {c_sig_s1, 8'd0} : {p_s1[PW*k +: PW], {(32-PW){1'b0}}};
             distance = {1'b0, top} - {1'b0, k == 8 ? c_t_s1 : t_s1[9*k +: 9]};
             aligned[32*k +: 32] = distance >= 10'd32 ? 32'd0 : justified >> distance[4:0];
             // Bits below the shift distance are the ones truncated away.

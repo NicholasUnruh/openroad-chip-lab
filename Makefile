@@ -4,7 +4,7 @@
 HARDFLOAT = third_party/hardfloat
 TRAINING_TOP ?= training_tile_v4
 TRAINING_BUILD = build/$(subst _,-,$(subst training_tile,training,$(TRAINING_TOP)))
-TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v2 training_tile_v3 training_tile_v4 training_tile_v5,$(TRAINING_TOP)),rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v) $(if $(filter training_tile_v6,$(TRAINING_TOP)),rtl/bf16_dot8_fp32.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
+TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v2 training_tile_v3 training_tile_v4 training_tile_v5,$(TRAINING_TOP)),rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v) $(if $(filter training_tile_v6,$(TRAINING_TOP)),rtl/fp_dot8_fp32.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
 TRAINING_INCLUDES = -I$(HARDFLOAT) -I$(HARDFLOAT)/RISCV
 # Simulation model of the SRAM macro; synthesis reads it as a black box.
 TRAINING_MACROS = $(if $(filter training_tile_v5 training_tile_v6,$(TRAINING_TOP)),tb/sky130_sram_1rw1r_128x256_8.v)
@@ -123,12 +123,29 @@ layout-training-v6:
 check-training-v6-structure:
 	$(MAKE) check-training-structure TRAINING_TOP=training_tile_v6
 
-.PHONY: sim-dot8
+# ASAP7 PPA harnesses: flatten with Yosys, then run ORFS to route (bin/ppa).
+.PHONY: ppa
+PPA_TOP ?= ppa_dot8_bf16
+PPA_RTL = rtl/ppa/$(PPA_TOP).v rtl/fp_dot8_fp32.v rtl/int8_dot8_int32.v rtl/fp32_accum_fma_pipe.v $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
+ppa:
+	mkdir -p build/ppa
+	yosys -Q -T -l build/ppa/$(PPA_TOP)_synth.log -p 'read_verilog $(TRAINING_INCLUDES) $(PPA_RTL); synth -top $(PPA_TOP) -flatten; check -assert; splitnets; write_verilog -noattr build/ppa/$(PPA_TOP).v'
+	./bin/ppa $(PPA_TOP)
+
+.PHONY: sim-dot8 sim-dot8-format sim-int8-dot8
+# Dot-product unit in each input format: 0 = BF16, 1 = OCP FP8 E4M3, 2 = OCP FP8 E5M2.
 sim-dot8:
+	for format in 0 1 2; do $(MAKE) sim-dot8-format DOT8_FORMAT=$$format || exit 1; done
+sim-int8-dot8:
+	verilator --cc --exe --build -j 4 --top-module int8_dot8_int32 --Mdir build/int8-dot8-sim \
+		rtl/int8_dot8_int32.v $(CURDIR)/tb/int8_dot8_test.cpp -CFLAGS '-std=c++17 -O2'
+	./build/int8-dot8-sim/Vint8_dot8_int32
+sim-dot8-format:
 	mkdir -p build
-	verilator --cc --exe --build -j 4 --top-module bf16_dot8_fp32 --Mdir build/dot8-sim \
-		rtl/bf16_dot8_fp32.v $(CURDIR)/tb/bf16_dot8_test.cpp -CFLAGS '-std=c++17 -O2 -fno-fast-math'
-	./build/dot8-sim/Vbf16_dot8_fp32
+	verilator --cc --exe --build -j 4 --top-module fp_dot8_fp32 -GFORMAT=$(DOT8_FORMAT) \
+		--Mdir build/dot8-$(DOT8_FORMAT)-sim rtl/fp_dot8_fp32.v $(CURDIR)/tb/fp_dot8_test.cpp \
+		-CFLAGS '-std=c++17 -O2 -fno-fast-math -DDOT8_FORMAT=$(DOT8_FORMAT)'
+	./build/dot8-$(DOT8_FORMAT)-sim/Vfp_dot8_fp32
 
 check-training-structure:
 	mkdir -p build

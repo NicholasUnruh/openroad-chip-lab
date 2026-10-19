@@ -1,4 +1,4 @@
-#include "Vbf16_dot8_fp32.h"
+#include "Vfp_dot8_fp32.h"
 #include "dot8_model.h"
 #include "verilated.h"
 #include <array>
@@ -10,6 +10,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 struct Vector { std::array<uint16_t, 8> a, b; uint32_t c; };
 
@@ -24,6 +25,14 @@ static std::string describe(const Vector &v) {
     return out;
 }
 
+#ifndef DOT8_FORMAT
+#define DOT8_FORMAT 0
+#endif
+constexpr Dot8Format format = DOT8_FORMAT == 0 ? dot8_bf16 : DOT8_FORMAT == 1 ? dot8_e4m3 : dot8_e5m2;
+constexpr unsigned man_bits = format.mantissa, width = 1 + format.exponent + format.mantissa;
+constexpr unsigned bias = (1u << (format.exponent - 1)) - 1, exp_max = (1u << format.exponent) - 1;
+constexpr const char *format_name = DOT8_FORMAT == 0 ? "bf16" : DOT8_FORMAT == 1 ? "e4m3" : "e5m2";
+
 static long double as_value(uint32_t bits) {
     float f;
     std::memcpy(&f, &bits, sizeof(f));
@@ -32,13 +41,13 @@ static long double as_value(uint32_t bits) {
 
 // Truncated results must stay within the documented error of the exactly rounded sum.
 static void check_truncation_bound(const Vector &v, const Dot8Result &spec) {
-    Dot8Result exact = dot8_exact(v.a, v.b, v.c);
+    Dot8Result exact = dot8_exact(v.a, v.b, v.c, format);
     long double s = as_value(spec.bits), e = as_value(exact.bits);
     if (!std::isfinite(s) || !std::isfinite(e)) {
         require(spec.bits == exact.bits || (spec.flags & 4) || (exact.flags & 4), "truncated special mismatch: " + describe(v));
         return;
     }
-    dot8::Terms t = dot8::terms(v.a, v.b, v.c);
+    dot8::Terms t = dot8::terms(v.a, v.b, v.c, format);
     int top = -100000;
     for (const auto &x : t.term)
         if (x.sig && x.lsb + int(x.width) > top) top = x.lsb + int(x.width);
@@ -48,32 +57,44 @@ static void check_truncation_bound(const Vector &v, const Dot8Result &spec) {
     require(std::fabs(s - e) <= bound, "truncation error exceeds bound: " + describe(v));
 }
 
-static uint16_t bf16(std::mt19937 &rng, unsigned lo, unsigned hi) {
-    return uint16_t((rng() & 1) << 15 | (lo + rng() % (hi - lo + 1)) << 7 | (rng() & 0x7f));
+static uint16_t code(std::mt19937 &rng, unsigned lo, unsigned hi) {
+    return uint16_t((rng() & 1) << (width - 1) | (lo + rng() % (hi - lo + 1)) << man_bits |
+                    (rng() & ((1u << man_bits) - 1)));
 }
 
 static uint32_t fp32(std::mt19937 &rng, unsigned lo, unsigned hi) {
     return (rng() & 1u) << 31 | (lo + rng() % (hi - lo + 1)) << 23 | (rng() & 0x7fffffu);
 }
 
-// Distributions: raw encodings, clustered exponents, wide spread, FP32 subnormal range,
-// overflow range, exact cancellation, sparse zeros/specials and signed all-zero sums.
+// Zeros, ones, extreme finite values and the format's NaN and infinity encodings.
+static std::vector<uint16_t> specials() {
+    uint16_t sign = uint16_t(1u << (width - 1)), one = uint16_t(bias << man_bits), top = uint16_t(exp_max << man_bits);
+    uint16_t max_normal = format.ieee ? uint16_t(top - 1) : uint16_t(top | ((1u << man_bits) - 2));
+    std::vector<uint16_t> out{0, sign, one, uint16_t(one | sign), 1, uint16_t(1 | sign),
+                              uint16_t(1u << man_bits), max_normal, uint16_t(max_normal | sign),
+                              uint16_t(top | ((1u << man_bits) - 1))};
+    if (format.ieee) {
+        out.insert(out.end(), {top, uint16_t(top | sign), uint16_t(top | 1u), uint16_t(top | (1u << (man_bits - 1)))});
+    }
+    return out;
+}
+
+// Distributions: raw encodings, clustered exponents, wide spread, low magnitudes, large
+// accumulators, sparse specials, signed all-zero sums, and exact cancellation.
 static Vector generate(std::mt19937 &rng, unsigned kind) {
+    static const std::vector<uint16_t> special = specials();
     Vector v;
     for (unsigned k = 0; k < 8; ++k) {
         switch (kind) {
-        case 0: v.a[k] = uint16_t(rng()); v.b[k] = uint16_t(rng()); break;
-        case 1: v.a[k] = bf16(rng, 124, 130); v.b[k] = bf16(rng, 124, 130); break;
-        case 2: v.a[k] = bf16(rng, 90, 170); v.b[k] = bf16(rng, 90, 170); break;
-        case 3: v.a[k] = bf16(rng, 0, 70); v.b[k] = bf16(rng, 40, 75); break;
-        case 4: v.a[k] = bf16(rng, 230, 254); v.b[k] = bf16(rng, 120, 140); break;
-        case 6: v.a[k] = rng() & 1 ? 0x8000 : 0; v.b[k] = bf16(rng, 1, 254); break;
-        default: {
-            static const uint16_t specials[] = {0x0000, 0x8000, 0x7f80, 0xff80, 0x7fc0, 0x7f81, 0x0001, 0x8001,
-                                                0x3f80, 0xbf80, 0x7f7f, 0x0080};
-            v.a[k] = rng() % 3 ? bf16(rng, 120, 134) : specials[rng() % 12];
-            v.b[k] = rng() % 3 ? bf16(rng, 120, 134) : specials[rng() % 12];
-        }
+        case 0: v.a[k] = uint16_t(rng() & ((1u << width) - 1)); v.b[k] = uint16_t(rng() & ((1u << width) - 1)); break;
+        case 1: v.a[k] = code(rng, bias - 3, bias + 3); v.b[k] = code(rng, bias - 3, bias + 3); break;
+        case 2: v.a[k] = code(rng, 1, exp_max - 1); v.b[k] = code(rng, 1, exp_max - 1); break;
+        case 3: v.a[k] = code(rng, 0, bias / 2); v.b[k] = code(rng, 0, bias); break;
+        case 4: v.a[k] = code(rng, exp_max - 3, exp_max - 1); v.b[k] = code(rng, bias - 2, bias + 2); break;
+        case 6: v.a[k] = rng() & 1 ? uint16_t(1u << (width - 1)) : 0; v.b[k] = code(rng, 1, exp_max - 1); break;
+        default:
+            v.a[k] = rng() % 3 ? code(rng, bias - 3, bias + 3) : special[rng() % special.size()];
+            v.b[k] = rng() % 3 ? code(rng, bias - 3, bias + 3) : special[rng() % special.size()];
         }
     }
     switch (kind) {
@@ -87,8 +108,7 @@ static Vector generate(std::mt19937 &rng, unsigned kind) {
         // c cancels the first product exactly, leaving a small residue from the others.
         Vector copy = v;
         for (unsigned k = 1; k < 8; ++k) copy.a[k] = 0;
-        copy.c = 0;
-        v.c = dot8_spec(copy.a, copy.b, 0).bits ^ 0x80000000u;
+        v.c = dot8_spec(copy.a, copy.b, 0, format).bits ^ 0x80000000u;
         if (rng() % 2) for (unsigned k = 1; k < 8; ++k) v.a[k] = 0;
     }
     return v;
@@ -97,7 +117,7 @@ static Vector generate(std::mt19937 &rng, unsigned kind) {
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     try {
-        Vbf16_dot8_fp32 dut;
+        Vfp_dot8_fp32 dut;
         std::mt19937 rng(20261019);
         constexpr unsigned latency = 4, per_kind = 600000, kinds = 7;
         std::deque<std::pair<Vector, Dot8Result>> in_flight;
@@ -106,23 +126,32 @@ int main(int argc, char **argv) {
         for (unsigned n = 0; n < kinds * per_kind + latency; ++n) {
             if (n < kinds * per_kind) {
                 Vector v = generate(rng, n % kinds);
-                Dot8Result spec = dot8_spec(v.a, v.b, v.c);
+                Dot8Result spec = dot8_spec(v.a, v.b, v.c, format);
                 if (spec.truncated) {
                     ++truncated;
                     check_truncation_bound(v, spec);
                 }
                 else {
-                    Dot8Result exact = dot8_exact(v.a, v.b, v.c);
+                    Dot8Result exact = dot8_exact(v.a, v.b, v.c, format);
                     require(exact.bits == spec.bits && exact.flags == spec.flags,
                             "specification differs from exact oracle: " + describe(v) +
                             " spec=" + std::to_string(spec.bits) + "/" + std::to_string(spec.flags) +
                             " exact=" + std::to_string(exact.bits) + "/" + std::to_string(exact.flags));
                     ++oracle_checked;
                 }
+#if DOT8_FORMAT == 0
                 for (unsigned k = 0; k < 8; ++k) {
                     dut.a[k / 2] = (dut.a[k / 2] & (k % 2 ? 0x0000ffffu : 0xffff0000u)) | uint32_t(v.a[k]) << (16 * (k % 2));
                     dut.b[k / 2] = (dut.b[k / 2] & (k % 2 ? 0x0000ffffu : 0xffff0000u)) | uint32_t(v.b[k]) << (16 * (k % 2));
                 }
+#else
+                dut.a = 0;
+                dut.b = 0;
+                for (unsigned k = 0; k < 8; ++k) {
+                    dut.a |= uint64_t(v.a[k]) << (8 * k);
+                    dut.b |= uint64_t(v.b[k]) << (8 * k);
+                }
+#endif
                 dut.c = v.c;
                 in_flight.emplace_back(v, spec);
             }
@@ -143,7 +172,7 @@ int main(int argc, char **argv) {
         }
         require(in_flight.empty(), "pipeline drained");
         dut.final();
-        std::cout << "PASS: bf16_dot8_fp32 vectors=" << checked << " oracle_exact=" << oracle_checked
+        std::cout << "PASS: fp_dot8_fp32 format=" << format_name << " vectors=" << checked << " oracle_exact=" << oracle_checked
                   << " truncated=" << truncated << " flags[nx,uf+nx,of+nx,nv]=" << flag_counts[1] << ","
                   << flag_counts[3] << "," << flag_counts[5] << "," << flag_counts[16] << '\n';
         return 0;

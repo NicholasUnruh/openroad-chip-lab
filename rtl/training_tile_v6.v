@@ -139,7 +139,7 @@ module training_tile_v6 (
     end
     genvar g;
     generate for (g = 0; g < 4; g = g + 1) begin: units
-        bf16_dot8_fp32 dot (
+        fp_dot8_fp32 #(.FORMAT(0)) dot (
             .clk(clk), .a(a_row), .b(unit_b[128*g +: 128]), .c(unit_c[32*g +: 32]),
             .result(unit_result[32*g +: 32]), .exception_flags(unit_flags[5*g +: 5])
         );

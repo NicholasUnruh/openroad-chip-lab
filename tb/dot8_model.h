@@ -5,6 +5,10 @@
 
 struct Dot8Result { uint32_t bits; unsigned flags; bool truncated; };
 
+// Input formats of fp_dot8_fp32: BF16 and OCP FP8. E4M3 has no infinities and one NaN mantissa.
+struct Dot8Format { unsigned exponent, mantissa; bool ieee; };
+constexpr Dot8Format dot8_bf16{8, 7, true}, dot8_e4m3{4, 3, false}, dot8_e5m2{5, 2, true};
+
 namespace dot8 {
 
 constexpr uint32_t canonical_nan = 0x7fc00000u;
@@ -23,6 +27,18 @@ inline Operand decode(uint32_t raw, unsigned fraction, unsigned exponent_bits, i
     return x;
 }
 
+inline Operand decode_input(uint32_t raw, Dot8Format f) {
+    Operand x = decode(raw, f.mantissa, f.exponent, (1 << (f.exponent - 1)) - 1);
+    if (!f.ieee) {
+        bool top = ((raw >> f.mantissa) & ((1u << f.exponent) - 1)) == (1u << f.exponent) - 1;
+        bool ones = (raw & ((1u << f.mantissa) - 1)) == (1u << f.mantissa) - 1;
+        x.inf = false;
+        x.nan = top && ones;
+        x.snan = false;
+    }
+    return x;
+}
+
 struct Term { bool sign; uint32_t sig; int lsb; unsigned width; };
 
 struct Terms {
@@ -30,15 +46,16 @@ struct Terms {
     bool nan = false, invalid = false, pos_inf = false, neg_inf = false, all_zero = true, all_negative = true;
 };
 
-inline Terms terms(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c) {
+inline Terms terms(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c,
+                   Dot8Format f = dot8_bf16) {
     Terms t;
     for (unsigned k = 0; k < 8; ++k) {
-        Operand x = decode(a[k], 7, 8, 127), y = decode(b[k], 7, 8, 127);
+        Operand x = decode_input(a[k], f), y = decode_input(b[k], f);
         bool sign = x.sign != y.sign;
         t.nan |= x.nan || y.nan;
         t.invalid |= x.snan || y.snan || (x.inf && y.zero) || (y.inf && x.zero);
         if ((x.inf || y.inf) && !x.nan && !y.nan && !x.zero && !y.zero) (sign ? t.neg_inf : t.pos_inf) = true;
-        t.term[k] = {sign, x.sig * y.sig, x.lsb + y.lsb, 16};
+        t.term[k] = {sign, x.sig * y.sig, x.lsb + y.lsb, 2 * (f.mantissa + 1)};
         t.all_zero &= t.term[k].sig == 0;
         t.all_negative &= sign;
     }
@@ -79,9 +96,10 @@ inline uint32_t round_fp32(bool sign, uint64_t mag, int lsb, bool &inexact, bool
 }  // namespace dot8
 
 // The specification: 32-bit frame below the largest term's top, truncation, one rounding.
-inline Dot8Result dot8_spec(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c) {
+inline Dot8Result dot8_spec(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c,
+                            Dot8Format f = dot8_bf16) {
     using namespace dot8;
-    Terms t = terms(a, b, c);
+    Terms t = terms(a, b, c, f);
     if (t.nan || t.invalid) return {canonical_nan, t.invalid ? 16u : 0u, false};
     if (t.pos_inf || t.neg_inf) return {t.neg_inf ? 0xff800000u : 0x7f800000u, 0, false};
     if (t.all_zero) return {t.all_negative ? 0x80000000u : 0u, 0, false};
@@ -108,9 +126,10 @@ inline Dot8Result dot8_spec(const std::array<uint16_t, 8> &a, const std::array<u
 }
 
 // Independent oracle: exact two's-complement sum in 640 bits, then correctly rounded.
-inline Dot8Result dot8_exact(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c) {
+inline Dot8Result dot8_exact(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c,
+                             Dot8Format f = dot8_bf16) {
     using namespace dot8;
-    Terms t = terms(a, b, c);
+    Terms t = terms(a, b, c, f);
     if (t.nan || t.invalid) return {canonical_nan, t.invalid ? 16u : 0u, false};
     if (t.pos_inf || t.neg_inf) return {t.neg_inf ? 0xff800000u : 0x7f800000u, 0, false};
     constexpr int words = 10, offset = 300;  // bit i has weight 2^(i - offset)
