@@ -1,4 +1,4 @@
-// Scratchpad GEMM with four fused BF16 dot-product units (docs/training-v6.md); V5 host interface.
+// Scratchpad GEMM with four fused BF16 dot-product units (docs/training-v6.md, docs/training-v6-interface.md).
 module training_tile_v6 (
     input wire clk, rst,
     input wire sp_write,

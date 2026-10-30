@@ -1,6 +1,6 @@
 # Eight-lane BF16 results
 
-Verified 2026-09-13 against `e049ba1`: V4 delivers 2.29× V3's throughput on the same streamed 8×8 GEMM workload with one-third less host traffic. Both use BF16 operands/multiplication and FP32 accumulation. Physical checks pass.
+Verified 2026-09-13 against `e049ba1`: V4 delivers 2.29× V3's throughput on the same streamed 8×8 GEMM workload with one-third less host traffic. Both use BF16 operands/multiplication and FP32 accumulation. Physical checks pass. V3 is retired; its figures here are history (tag `archive/pre-cleanup-2026-10-30`).
 
 ## Equal-work comparison
 
@@ -23,7 +23,7 @@ V4 meets the 25 ns constraint with +7.49368 ns setup and +0.33452 ns hold slack,
 
 ## Correctness evidence
 
-RTL and generic-netlist simulations each pass 1,833 functional/training jobs plus 320 timed jobs. The shared test suite covers:
+RTL and generic-netlist simulations each pass 1,833 functional/training jobs plus 320 timed jobs (448 with the later gemm16/32 benchmarks). The suite covers:
 
 | Check | Result |
 | --- | --- |
@@ -34,12 +34,12 @@ RTL and generic-netlist simulations each pass 1,833 functional/training jobs plu
 | Protocol | Both buffers, overlapping transfers, malformed writes, all 67 abort phases |
 | Training | BF16 forward/dW/dX/SGD, FP32 master weights; loss 57.3555→0.000779807 after 48 updates |
 | Padded GEMM | 7×13 by 13×9, four hardware jobs with retained C |
-| Regressions | V3 RTL/netlist: 4,873 jobs plus 768 timed jobs each; V2 RTL/netlist and scalar RTL: 405 jobs each; MAC8 simulation/synthesis |
+| Regressions at `e049ba1` (history; tiles retired) | V3 RTL/netlist: 4,873 jobs plus 768 timed jobs each; V2 RTL/netlist and scalar RTL: 405 jobs each; MAC8 simulation/synthesis |
 
 The encoding sweep is not exhaustive arithmetic conformance. Training covers one dense-layer workload.
 
 ## Evidence and reproduction
 
-Use the [V4 commands](training-v4.md). Local logs: `build/training_v4_{sim,netlist_sim,layout,gds_inspection}.log`, `build/training-v4_{structure,synth}.log`; regression logs: `build/training_v4_{v3,v3_netlist,v2,v2_netlist,scalar}_regression.log`. Metrics and source hashes: `build/training_v4_comparison.json`. The shared benchmark prints `mode=gemm8_stream`.
+Use the [V4 commands](training-v4.md). Local logs: `build/training_v4_{sim,netlist_sim,layout,gds_inspection}.log`, `build/training-v4_{structure,synth}.log`; historical regression logs: `build/training_v4_{v3,v3_netlist,v2,v2_netlist,scalar}_regression.log`. Metrics and source hashes: `build/training_v4_comparison.json`. The shared benchmark prints `mode=gemm8_stream`.
 
 Power and energy are unmeasured. [Fabrication gates](physical-flow.md) remain separate.

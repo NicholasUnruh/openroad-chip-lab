@@ -1,32 +1,8 @@
-#if defined(TILE_V4)
 #include "Vtraining_tile_v4.h"
 using Model = Vtraining_tile_v4;
 constexpr unsigned compute_cycles = 67;
-constexpr unsigned lanes = 8;
 constexpr double target_mhz = 40;
 constexpr const char *design_name = "training_tile_v4";
-#elif defined(TILE_V3)
-#include "Vtraining_tile_v3.h"
-using Model = Vtraining_tile_v3;
-constexpr unsigned compute_cycles = 19;
-constexpr unsigned lanes = 4;
-constexpr double target_mhz = 40;
-constexpr const char *design_name = "training_tile_v3";
-#elif defined(TILE_V2)
-#include "Vtraining_tile_v2.h"
-using Model = Vtraining_tile_v2;
-constexpr unsigned compute_cycles = 19;
-constexpr unsigned lanes = 4;
-constexpr double target_mhz = 40;
-constexpr const char *design_name = "training_tile_v2";
-#else
-#include "Vtraining_tile.h"
-using Model = Vtraining_tile;
-constexpr unsigned compute_cycles = 64;
-constexpr unsigned lanes = 1;
-constexpr double target_mhz = 10;
-constexpr const char *design_name = "training_tile";
-#endif
 #include "verilated.h"
 #include <array>
 #include <cmath>
@@ -37,11 +13,7 @@ constexpr const char *design_name = "training_tile";
 #include <stdexcept>
 #include <string>
 
-#ifdef TILE_V4
 constexpr unsigned dimension = 8;
-#else
-constexpr unsigned dimension = 4;
-#endif
 constexpr unsigned elements = dimension * dimension;
 constexpr unsigned tile_flops = 2 * dimension * dimension * dimension;
 using Matrix = std::array<float, elements>;
@@ -58,7 +30,6 @@ static float value(uint32_t raw) {
     return result;
 }
 
-#if defined(TILE_V3) || defined(TILE_V4)
 static float bf16(float x) {
     uint32_t raw = bits(x);
     if ((raw & 0xffffu) == 0) return x;
@@ -71,7 +42,6 @@ static Matrix bf16_matrix(Matrix matrix) {
     for (auto &x : matrix) x = bf16(x);
     return matrix;
 }
-#endif
 
 static void require(bool condition, const std::string &message) {
     if (!condition) throw std::runtime_error(message);
@@ -119,10 +89,8 @@ public:
     }
 
     void reset() {
-#if defined(TILE_V3) || defined(TILE_V4)
         dut.job_bank = 0;
         dut.host_bank = 0;
-#endif
         dut.rst = 1;
         dut.start = 0;
         dut.write_enable = 0;
@@ -136,7 +104,6 @@ public:
         dut.write_enable = 1u << bank;
         for (unsigned i = 0; i < elements; ++i) {
             dut.write_addr = i;
-#if defined(TILE_V3) || defined(TILE_V4)
             if (bank < 2) {
                 dut.write_data = (bits(bf16(matrix[i])) >> 16) |
                                  (bits(bf16(matrix[i + 1])) & 0xffff0000u);
@@ -144,9 +111,6 @@ public:
             } else dut.write_data = bits(matrix[i]);
             dut.eval();
             require(dut.write_ready, "idle write ready");
-#else
-            dut.write_data = bits(matrix[i]);
-#endif
             tick();
             written_bytes += 4;
         }
@@ -212,61 +176,10 @@ public:
         dut.transpose_b = !tb;
         dut.accumulate = !accumulate;
         Matrix out = finish(true);
-#if defined(TILE_V3) || defined(TILE_V4)
         compare(out, reference(bf16_matrix(a), bf16_matrix(b), c, ta, tb, accumulate), "BF16 matrix reference");
-#else
-        compare(out, reference(a, b, c, ta, tb, accumulate), "matrix reference");
-#endif
         return out;
     }
 };
-
-static void arithmetic_tests(Tile &tile) {
-    struct Case { uint32_t a, b, c; unsigned flags; };
-    const Case cases[] = {
-        {0x3f800000, 0x40000000, 0, 0},
-        {0x80000000, 0x3f800000, 0x80000000, 0},
-        {0x00000001, 0x3f800000, 0, 0},
-        {0x00000001, 0x3f000000, 0, 3},
-        {0x7f7fffff, 0x40000000, 0, 5},
-        {0x7f800000, 0x3f800000, 0, 0},
-        {0x7f800000, 0, 0, 16},
-        {0x7fc12345, 0x3f800000, 0, 0},
-        {0x7f812345, 0x3f800000, 0, 16},
-        {0x3f800000, 0x33800000, 0x3f800000, 1},
-    };
-    for (const auto &test : cases) {
-        Matrix a, b, c;
-        a.fill(value(test.a)); b.fill(value(test.b)); c.fill(value(test.c));
-        tile.run(a, b, c, false, false, true);
-        require(tile.flags == test.flags, "directed exception flags");
-    }
-
-    Matrix a{}, b{}, c;
-    c.fill(-1.0f);
-    for (int i = 0; i < 4; ++i) a[i * 4] = value(0x3f800001);
-    for (int j = 0; j < 4; ++j) b[j] = value(0x3f7ffffe);
-    auto fused = tile.run(a, b, c, false, false, true);
-    require(bits(fused[0]) == 0xa8800000, "single rounding cancellation must retain -2^-46");
-
-    a.fill(0); b.fill(0); c.fill(0);
-    a[0] = value(0x7f7fffff);
-    b[0] = 2;
-    b[3] = value(0x7f812345);
-    tile.run(a, b);
-    require(tile.flags == 21, "combine overflow/inexact and invalid across columns");
-
-    std::mt19937 rng(20260912);
-    for (unsigned test = 0; test < 256; ++test) {
-        for (auto *matrix : {&a, &b, &c})
-            for (float &x : *matrix)
-                x = test < 128 ? float(int(rng() % 2001) - 1000) / 128.0f
-                               : value(rng());
-        tile.run(a, b, c, test & 1, test & 2, test & 4);
-    }
-    std::cout << "PASS: 268 numerical tiles; FP32 bit comparison, all transpose/accumulate modes, "
-                 "NaNs, infinities, subnormals, ties, fused cancellation, exception flags\n";
-}
 
 static void protocol_tests(Tile &tile) {
     Matrix a{}, b{}, c{};
@@ -312,97 +225,12 @@ static double loss(const Matrix &prediction, const Matrix &target) {
     return sum;
 }
 
-static void training_test(Tile &tile) {
-    Matrix x{1, 0.25f, 0, 0, 0, 1, -0.25f, 0,
-             0, 0, 1, 0.25f, -0.25f, 0, 0, 1};
-    Matrix target_weights, weights{};
-    for (int i = 0; i < elements; ++i) target_weights[i] = float(i - 7) / 8;
-    Matrix target = reference(x, target_weights, {}, false, false, false);
-    Matrix step{};
-    for (int i = 0; i < 4; ++i) step[5 * i] = -0.125f;
-    double initial = 0, previous = 0;
-    for (int epoch = 0; epoch < 33; ++epoch) {
-        Matrix y = tile.run(x, weights);
-        double current = loss(y, target);
-        if (epoch == 0) initial = current;
-        else require(current < previous, "training loss must decrease");
-        previous = current;
-        if (epoch == 32) break;
-        Matrix dy;
-        for (int i = 0; i < elements; ++i) dy[i] = y[i] - target[i];
-        Matrix dw = tile.run(x, dy, {}, true, false);
-        Matrix dx = tile.run(dy, weights, {}, false, true);
-        // Check the gradient formula independently of the FMA reference loop.
-        if (epoch == 1) {
-            constexpr float epsilon = 1.0f / 1024;
-            for (int i = 0; i < elements; ++i) {
-                Matrix plus = weights, minus = weights;
-                plus[i] += epsilon; minus[i] -= epsilon;
-                double numerical = (loss(reference(x, plus, {}, false, false, false), target) -
-                                    loss(reference(x, minus, {}, false, false, false), target)) / (2 * epsilon);
-                require(std::abs(numerical - dw[i]) < 0.003, "weight gradient finite difference");
-                plus = x; minus = x;
-                plus[i] += epsilon; minus[i] -= epsilon;
-                numerical = (loss(reference(plus, weights, {}, false, false, false), target) -
-                             loss(reference(minus, weights, {}, false, false, false), target)) / (2 * epsilon);
-                require(std::abs(numerical - dx[i]) < 0.003, "input gradient finite difference");
-            }
-        }
-        weights = tile.run(step, dw, weights, false, false, true);
-    }
-    require(previous < initial * 0.001, "training must reduce loss by over 99.9 percent");
-    std::cout << "PASS: dense-layer forward, dW, dX, SGD; finite-difference gradients; epochs=32"
-              << " initial_loss=" << initial << " final_loss=" << previous << '\n';
-}
-
-static void benchmark(Tile &tile) {
-    Matrix a, b, c;
-    for (int i = 0; i < elements; ++i) {
-        a[i] = float(i - 8) / 16;
-        b[i] = float(i + 1) / 32;
-        c[i] = 0.25f;
-    }
-    for (const std::string mode : {"resident", "stream_inputs", "reuse_weights", "stream_accumulate"}) {
-        tile.load(a, b, c);
-        uint64_t start_cycles = tile.cycles;
-        uint64_t start_bytes = tile.written_bytes + tile.read_bytes;
-        constexpr unsigned tiles = 64;
-        for (unsigned n = 0; n < tiles; ++n) {
-            if (mode == "stream_accumulate") tile.load(a, b, c);
-            if (mode == "stream_inputs") {
-                tile.load_bank(0, a);
-                tile.load_bank(1, b);
-            }
-            if (mode == "reuse_weights") tile.load_bank(0, a);
-            bool acc = mode == "stream_accumulate";
-            tile.launch(false, false, acc);
-            for (unsigned k = 0; k < compute_cycles; ++k) tile.tick();
-            require(tile.dut.done && !tile.dut.busy, "benchmark completion");
-            compare(tile.read(true), reference(a, b, c, false, false, acc), "benchmark output");
-        }
-        uint64_t elapsed = tile.cycles - start_cycles;
-        uint64_t bytes = tile.written_bytes + tile.read_bytes - start_bytes;
-        unsigned transfer_cycles = mode == "stream_accumulate" ? 48 :
-                                   mode == "stream_inputs" ? 32 : mode == "reuse_weights" ? 16 : 0;
-        require(elapsed == tiles * (transfer_cycles + 1 + compute_cycles + 16), "benchmark cycle accounting");
-        require(bytes == tiles * (transfer_cycles + 16) * 4, "benchmark traffic accounting");
-        double flops_per_cycle = double(tiles * 128) / elapsed;
-        std::cout << "BENCH design=" << design_name << " mode=" << mode << " tiles=" << tiles
-                  << " cycles=" << elapsed << " bytes=" << bytes << " flops=" << tiles * 128
-                  << " target_mflops=" << flops_per_cycle * target_mhz
-                  << " utilization=" << flops_per_cycle / (2 * lanes) << '\n';
-    }
-}
-
-#if defined(TILE_V3) || defined(TILE_V4)
 #include "bf16_tile_tests.h"
-#endif
 
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     try {
         Tile tile;
-#if defined(TILE_V3) || defined(TILE_V4)
         bf16_tests(tile);
         protocol_tests(tile);
         buffered_tests(tile);
@@ -412,12 +240,6 @@ int main(int argc, char **argv) {
         streamed_gemm_benchmark<64, 8>(tile);
         streamed_gemm_benchmark<8, 16>(tile);
         streamed_gemm_benchmark<1, 32>(tile);
-#else
-        arithmetic_tests(tile);
-        protocol_tests(tile);
-        training_test(tile);
-        benchmark(tile);
-#endif
         tile.dut.final();
         std::cout << "PASS: " << design_name << " jobs=" << tile.jobs << '\n';
         return 0;

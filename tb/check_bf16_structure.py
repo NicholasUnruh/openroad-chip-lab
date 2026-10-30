@@ -2,8 +2,8 @@ import json
 import sys
 
 
-def check(path, top="training_tile_v3"):
-    dimension = {"training_tile_v3": 4, "training_tile_v4": 8, "training_tile_v5": 8, "training_tile_v6": 8}[top]
+def check(path, top="training_tile_v4"):
+    dimension = {"training_tile_v4": 8, "training_tile_v6": 8}[top]
     # V6 fuses eight products per dot-product unit; four units give 32 multipliers.
     multiplier_count = 32 if top == "training_tile_v6" else dimension
     with open(path) as source:
@@ -26,16 +26,13 @@ def check(path, top="training_tile_v3"):
     expected = {"engine.a_mem": (16, 2*dimension**2)}
     if top == "training_tile_v6":
         expected = {}  # operand and accumulator registers are packed vectors
-    elif dimension == 8:
-        expected.update({f"engine.banked_b.banks[{bank}].mem": (16, 2*dimension) for bank in range(dimension)})
     else:
-        expected["engine.b_mem"] = (16, 2*dimension**2)
-    if top != "training_tile_v6":
+        expected.update({f"engine.banked_b.banks[{bank}].mem": (16, 2*dimension) for bank in range(dimension)})
         expected.update({f"engine.lanes[{lane}].c_bank": (32, 2*dimension) for lane in range(dimension)})
     actual = {name: (memory["width"], memory["size"]) for name, memory in memories.items()}
     if actual != expected:
         raise ValueError(f"unexpected operand/accumulator storage: {actual}")
-    if top in ("training_tile_v5", "training_tile_v6"):
+    if top == "training_tile_v6":
         macros = [cell for cell in module["cells"].values() if cell["type"] == "sky130_sram_1rw1r_128x256_8"]
         if len(macros) != 1:
             raise ValueError(f"expected one scratchpad SRAM macro, found {len(macros)}")
@@ -45,7 +42,7 @@ def check(path, top="training_tile_v3"):
 if __name__ == "__main__":
     try:
         if len(sys.argv) not in (2, 3):
-            raise ValueError("usage: python3 tb/check_bf16_structure.py <yosys-json> [training_tile_v3|training_tile_v4|training_tile_v5|training_tile_v6]")
+            raise ValueError("usage: python3 tb/check_bf16_structure.py <yosys-json> [training_tile_v4|training_tile_v6]")
         check(*sys.argv[1:])
     except (ValueError, KeyError, OSError) as error:
         print(f"FAIL: {error}")

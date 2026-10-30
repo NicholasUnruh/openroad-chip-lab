@@ -24,60 +24,6 @@ orfs_gds(
 )
 
 orfs_flow(
-    name = "training_tile",
-    arguments = {
-        "CORE_UTILIZATION": "35",
-        "PLACE_DENSITY": "0.55",
-    },
-    pdk = "@orfs//flow:sky130hd",
-    sources = {"SDC_FILE": [":training_tile.sdc"]},
-    verilog_files = [":training_tile.v"],
-)
-
-orfs_gds(
-    name = "training_tile_gds",
-    klayout = ":klayout_local",
-    src = ":training_tile_final",
-)
-
-orfs_flow(
-    name = "training_tile_v2",
-    arguments = {
-        "CORE_UTILIZATION": "35",
-        "PLACE_DENSITY": "0.55",
-    },
-    pdk = "@orfs//flow:sky130hd",
-    sources = {"SDC_FILE": [":training_tile_v2.sdc"]},
-    verilog_files = [":training_tile_v2.v"],
-)
-
-orfs_gds(
-    name = "training_tile_v2_gds",
-    klayout = ":klayout_local",
-    src = ":training_tile_v2_final",
-)
-
-orfs_flow(
-    name = "training_tile_v3",
-    arguments = {
-        # Detailed-route parasitics exceeded the initial slew/cap limits by up to 4.2%.
-        "CAP_MARGIN": "10",
-        "CORE_UTILIZATION": "35",
-        "PLACE_DENSITY": "0.55",
-        "SLEW_MARGIN": "10",
-    },
-    pdk = "@orfs//flow:sky130hd",
-    sources = {"SDC_FILE": [":training_tile_v3.sdc"]},
-    verilog_files = [":training_tile_v3.v"],
-)
-
-orfs_gds(
-    name = "training_tile_v3_gds",
-    klayout = ":klayout_local",
-    src = ":training_tile_v3_final",
-)
-
-orfs_flow(
     name = "training_tile_v4",
     arguments = {
         "CAP_MARGIN": "25",
@@ -97,34 +43,6 @@ orfs_gds(
 )
 
 SKY130_SRAM = "@orfs//flow:platforms/sky130ram/sky130_sram_1rw1r_128x256_8/sky130_sram_1rw1r_128x256_8"
-
-orfs_flow(
-    name = "training_tile_v5",
-    arguments = {
-        "CAP_MARGIN": "25",
-        "CORE_AREA": "10 10 1690 1690",
-        "DIE_AREA": "0 0 1700 1700",
-        "MACRO_PLACE_HALO": "20 20",
-        "PLACE_DENSITY": "0.55",
-        "SLEW_MARGIN": "25",
-    },
-    pdk = "@orfs//flow:sky130hd",
-    sources = {
-        "ADDITIONAL_GDS": [SKY130_SRAM + ".gds"],
-        "ADDITIONAL_LEFS": [SKY130_SRAM + ".lef"],
-        "ADDITIONAL_LIBS": [SKY130_SRAM + "_TT_1p8V_25C.lib"],
-        "MACRO_PLACEMENT_TCL": [":scratchpad_macro.tcl"],
-        "PDN_TCL": [":scratchpad_pdn.tcl"],
-        "SDC_FILE": [":training_tile_v5.sdc"],
-    },
-    verilog_files = [":training_tile_v5.v"],
-)
-
-orfs_gds(
-    name = "training_tile_v5_gds",
-    klayout = ":klayout_local",
-    src = ":training_tile_v5_final",
-)
 
 orfs_flow(
     name = "training_tile_v6",

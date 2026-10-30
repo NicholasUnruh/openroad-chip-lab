@@ -4,22 +4,16 @@
 HARDFLOAT = third_party/hardfloat
 TRAINING_TOP ?= training_tile_v4
 TRAINING_BUILD = build/$(subst _,-,$(subst training_tile,training,$(TRAINING_TOP)))
-TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v2 training_tile_v3 training_tile_v4 training_tile_v5,$(TRAINING_TOP)),rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v) $(if $(filter training_tile_v6,$(TRAINING_TOP)),rtl/fp_dot8_fp32.v rtl/fp32_round.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
+TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v4,$(TRAINING_TOP)),rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v) $(if $(filter training_tile_v6,$(TRAINING_TOP)),rtl/fp_dot8_fp32.v rtl/fp32_round.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
 TRAINING_INCLUDES = -I$(HARDFLOAT) -I$(HARDFLOAT)/RISCV
 # Simulation model of the SRAM macro; synthesis reads it as a black box.
-TRAINING_MACROS = $(if $(filter training_tile_v5 training_tile_v6,$(TRAINING_TOP)),tb/sky130_sram_1rw1r_128x256_8.v)
+TRAINING_MACROS = $(if $(filter training_tile_v6,$(TRAINING_TOP)),tb/sky130_sram_1rw1r_128x256_8.v)
 TRAINING_READ_MACROS = $(if $(TRAINING_MACROS),read_verilog -lib $(TRAINING_MACROS);)
-TRAINING_TEST = tb/$(if $(filter training_tile_v5 training_tile_v6,$(TRAINING_TOP)),scratchpad_tile_test,training_tile_test).cpp
-TRAINING_CFLAGS = -std=c++17 -O2 -fno-fast-math -ffp-contract=off $(if $(filter training_tile_v2,$(TRAINING_TOP)),-DTILE_V2) $(if $(filter training_tile_v3,$(TRAINING_TOP)),-DTILE_V3) $(if $(filter training_tile_v4,$(TRAINING_TOP)),-DTILE_V4) $(if $(filter training_tile_v6,$(TRAINING_TOP)),-DTILE_V6)
+TRAINING_TEST = tb/$(if $(filter training_tile_v6,$(TRAINING_TOP)),scratchpad_tile_test,training_tile_test).cpp
+TRAINING_CFLAGS = -std=c++17 -O2 -fno-fast-math -ffp-contract=off
 
-ifeq ($(TRAINING_TOP),training_tile_v3)
-sim-training synth-training: check-training-v3-structure
-endif
 ifeq ($(TRAINING_TOP),training_tile_v4)
 sim-training synth-training: check-training-v4-structure
-endif
-ifeq ($(TRAINING_TOP),training_tile_v5)
-sim-training synth-training: check-training-v5-structure
 endif
 ifeq ($(TRAINING_TOP),training_tile_v6)
 sim-training synth-training: check-training-v6-structure
@@ -58,29 +52,6 @@ sim-training-netlist: synth-training
 layout-training: synth-training
 	./bin/layout $(TRAINING_TOP)
 
-.PHONY: sim-training-v2 synth-training-v2 sim-training-v2-netlist layout-training-v2
-sim-training-v2:
-	$(MAKE) sim-training TRAINING_TOP=training_tile_v2
-synth-training-v2:
-	$(MAKE) synth-training TRAINING_TOP=training_tile_v2
-sim-training-v2-netlist:
-	$(MAKE) sim-training-netlist TRAINING_TOP=training_tile_v2
-layout-training-v2:
-	$(MAKE) layout-training TRAINING_TOP=training_tile_v2
-
-.PHONY: sim-training-v3 synth-training-v3 sim-training-v3-netlist layout-training-v3 check-training-v3-structure
-sim-training-v3:
-	$(MAKE) sim-training TRAINING_TOP=training_tile_v3
-synth-training-v3:
-	$(MAKE) synth-training TRAINING_TOP=training_tile_v3
-sim-training-v3-netlist:
-	$(MAKE) sim-training-netlist TRAINING_TOP=training_tile_v3
-layout-training-v3:
-	$(MAKE) layout-training TRAINING_TOP=training_tile_v3
-
-check-training-v3-structure:
-	$(MAKE) check-training-structure TRAINING_TOP=training_tile_v3
-
 .PHONY: sim-training-v4 synth-training-v4 sim-training-v4-netlist layout-training-v4 check-training-v4-structure check-training-structure sim-training-v4-walkthrough
 sim-training-v4:
 	$(MAKE) sim-training TRAINING_TOP=training_tile_v4
@@ -98,18 +69,6 @@ layout-training-v4:
 	$(MAKE) layout-training TRAINING_TOP=training_tile_v4
 check-training-v4-structure:
 	$(MAKE) check-training-structure TRAINING_TOP=training_tile_v4
-
-.PHONY: sim-training-v5 synth-training-v5 sim-training-v5-netlist layout-training-v5 check-training-v5-structure
-sim-training-v5:
-	$(MAKE) sim-training TRAINING_TOP=training_tile_v5
-synth-training-v5:
-	$(MAKE) synth-training TRAINING_TOP=training_tile_v5
-sim-training-v5-netlist:
-	$(MAKE) sim-training-netlist TRAINING_TOP=training_tile_v5
-layout-training-v5:
-	$(MAKE) layout-training TRAINING_TOP=training_tile_v5
-check-training-v5-structure:
-	$(MAKE) check-training-structure TRAINING_TOP=training_tile_v5
 
 .PHONY: sim-training-v6 synth-training-v6 sim-training-v6-netlist layout-training-v6 check-training-v6-structure
 sim-training-v6:

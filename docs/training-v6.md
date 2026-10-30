@@ -1,6 +1,6 @@
 # Fused dot-product accelerator
 
-`training_tile_v6` keeps the [V5 host interface](training-v5.md) and scratchpad but replaces the eight chained FMA lanes with four fused 8-term dot-product units: 32 BF16 multiply-accumulates per clock, four times V4 and V5.
+`training_tile_v6` puts a 4 KB SRAM scratchpad and GEMM sequencer ([host interface](training-v6-interface.md)) in front of four fused 8-term dot-product units instead of V4's eight chained FMA lanes: 32 BF16 multiply-accumulates per clock, four times V4.
 
 ```sh
 make sim-dot8

@@ -8,7 +8,7 @@ RTL, scripts, generated source, GDS layouts, waveforms, logs, metrics and JSON
 results remain local. The [recorded V4 evidence](training-v4-results.md) is unchanged.
 Normal build commands can regenerate the removed compiled caches.
 
-[Completion receipt](../../../IBKR/bots/ibkr-cnn-rl-research/research/provenance/2026-10-09-project-storage-export-completion.json)
+[Completion receipt](../../../IBKR/ibkr-cnn-rl-research/research/provenance/2026-10-09-project-storage-export-completion.json)
 pins exact manifests, remote checksums and recovery evidence.
 [Drive archive](https://drive.google.com/drive/folders/1YAOSUqS50c0vpQX8jrUDO_wmOIKU2fx4).
 

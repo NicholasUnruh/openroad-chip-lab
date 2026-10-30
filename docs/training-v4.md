@@ -1,6 +1,8 @@
 # Eight-lane BF16 accelerator
 
-`training_tile_v4` computes an 8×8 matrix product with eight native BF16 lanes, fused FP32 accumulation and two buffers. It doubles operand reuse per output column compared with the [four-lane BF16 baseline](training-v3.md). The shared engine retains V2/V3 dimensions by default.
+`training_tile_v4` computes an 8×8 matrix product with eight native BF16 lanes, fused FP32 accumulation and two buffers. It doubles operand reuse per output column compared with the retired four-lane BF16 tile.
+
+`rtl/training_tile_engine.v` keeps its earlier four-lane, unbuffered FP32 parameter defaults; `training_tile_v4` overrides all three. Leave them in place: these sources are vendored unmodified into the FPGA build.
 
 ```sh
 make sim-training-v4
@@ -12,7 +14,7 @@ klayout build/layout-training-v4/training_tile_v4.gds
 
 ## Arithmetic and scheduling
 
-A/B storage and multiplication use BF16 exclusively. Each lane has an unsigned 8×8-bit significand multiplier with an exact 16-bit product. The shared arithmetic pipeline retains FP32 accumulation/results and one nearest-even rounding per FMA. BF16 subnormals, canonical NaNs and exception flags follow the [V3 arithmetic contract](training-v3.md#native-arithmetic-and-storage). Host software quantizes new operands to BF16.
+A/B storage and multiplication use BF16 exclusively. Each lane has an unsigned 8×8-bit significand multiplier with an exact 16-bit product. BF16 exponent/sign handling feeds a shared HardFloat alignment, normalization and rounding pipeline. Each FMA rounds once to nearest-even FP32; C and outputs retain FP32 precision, including gradual underflow with tininess after rounding. An eight-term sum rounds after each FMA, so it is not exact accumulation. BF16 subnormals are preserved; NaNs canonicalize to FP32 `0x7fc00000`. Products are not rounded to BF16 before accumulation. Host software quantizes new operands to BF16; no FP32 operand mode exists. The structural check rejects operand widths other than 16 bits or multipliers other than eight unsigned 8×8 units.
 
 Eight rows interleave accumulator dependencies. The sequencer issues 64 groups of eight FMAs, followed by three drain clocks: 512 FMAs, or 1,024 FLOPs, per job. The 67th rising edge after accepted start clears `busy` and pulses `done`; another start can be accepted on the following edge. Exception flags combine across all eight lanes.
 
@@ -22,18 +24,6 @@ B uses eight physical banks selected by `row XOR column`. Both normal and transp
 
 ## Host interface
 
-The [V3 buffer and transfer contract](training-v3.md#host-interface) applies with these dimensions:
-
-| Item | V4 |
-| --- | --- |
-| Element address | Six bits, `8*row+column`, range 0–63 |
-| Data ports | Independent 32-bit write and 32-bit read |
-| A/B write | Two packed BF16 values at an even element address |
-| C write/read | One FP32 element |
-| A/B preload | 64 clocks per buffer |
-| C initialization/readout | 64 clocks each |
-| Compute / earliest start interval | 67 / 68 clocks |
-
-Alternate `job_bank` between jobs. During compute, set `host_bank` to the other buffer, read its previous C and preload its next A/B concurrently. Consume C before reusing that buffer. A/B preloading fits within computation; externally supplied C needs another 64 writes. Reset aborts computation and retains unspecified or partial buffer contents.
+The [host interface](training-v4-interface.md) owns signals, the write/read contract, the transfer budget and training operations.
 
 There is no DMA, command queue, SRAM macro or external bus adapter. See [verification and measured tradeoffs](training-v4-results.md) and the [fabrication gates](physical-flow.md).

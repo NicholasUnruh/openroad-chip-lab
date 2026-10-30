@@ -13,14 +13,14 @@ The introductory 8-bit multiply-accumulate core remains available through `make 
 | Guide | Purpose |
 | --- | --- |
 | [Setup](docs/setup.md) | Tools and first build |
-| [Fused dot-product V6](docs/training-v6.md) | 32 MACs/clock, SRAM scratchpad; [results](docs/training-v6-results.md) |
+| [Fused dot-product V6](docs/training-v6.md) | 32 MACs/clock, SRAM scratchpad; [interface](docs/training-v6-interface.md), [results](docs/training-v6-results.md) |
 | [Numerics study](docs/numerics-study.md) | ASAP7 BF16/FP8/MX/INT8 datapath comparison |
-| [BF16 V4](docs/training-v4.md) | Default tile; [results](docs/training-v4-results.md), [hands-on lab](docs/v4-hands-on.md) |
-| [V3](docs/training-v3.md), [V2](docs/training-v2.md) baselines | Earlier four-lane BF16 and FP32 tiles |
-| [Scalar FP32 baseline](docs/training-tile.md) | Original training workload |
+| [BF16 V4](docs/training-v4.md) | Default tile; [interface](docs/training-v4-interface.md), [results](docs/training-v4-results.md), [hands-on lab](docs/v4-hands-on.md) |
 | [MAC8 interface](docs/mac8.md) | RTL behavior |
 | [Learning path](docs/learning-path.md) | Fundamentals and exercises |
 | [Physical flow](docs/physical-flow.md) | Layout, results, fabrication gates |
 | [Storage recovery](docs/storage-recovery.md) | Offloaded compiled caches |
+
+Retired tiles (scalar FP32, V2, V3, V5) live at tag `archive/pre-cleanup-2026-10-30`, with copies in `~/projects/ARCHIVE/openroad-chip-lab-old-tiles-2026-10-30/`.
 
 **Fabrication gate:** the layout is a core. A chip needs IO, power, foundry DRC/LVS and signoff before fabrication.
