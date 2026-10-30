@@ -22,3 +22,72 @@ orfs_gds(
     klayout = ":klayout_local",
     src = ":mac8_final",
 )
+
+orfs_flow(
+    name = "training_tile_v4",
+    arguments = {
+        "CAP_MARGIN": "25",
+        "CORE_UTILIZATION": "35",
+        "PLACE_DENSITY": "0.55",
+        "SLEW_MARGIN": "25",
+    },
+    pdk = "@orfs//flow:sky130hd",
+    sources = {"SDC_FILE": [":training_tile_v4.sdc"]},
+    verilog_files = [":training_tile_v4.v"],
+)
+
+orfs_gds(
+    name = "training_tile_v4_gds",
+    klayout = ":klayout_local",
+    src = ":training_tile_v4_final",
+)
+
+SKY130_SRAM = "@orfs//flow:platforms/sky130ram/sky130_sram_1rw1r_128x256_8/sky130_sram_1rw1r_128x256_8"
+
+orfs_flow(
+    name = "training_tile_v6",
+    arguments = {
+        "CAP_MARGIN": "25",
+        "CORE_AREA": "10 10 1690 1690",
+        "DIE_AREA": "0 0 1700 1700",
+        "MACRO_PLACE_HALO": "20 20",
+        "PLACE_DENSITY": "0.55",
+        "SLEW_MARGIN": "25",
+    },
+    pdk = "@orfs//flow:sky130hd",
+    sources = {
+        "ADDITIONAL_GDS": [SKY130_SRAM + ".gds"],
+        "ADDITIONAL_LEFS": [SKY130_SRAM + ".lef"],
+        "ADDITIONAL_LIBS": [SKY130_SRAM + "_TT_1p8V_25C.lib"],
+        "MACRO_PLACEMENT_TCL": [":scratchpad_macro.tcl"],
+        "PDN_TCL": [":scratchpad_pdn.tcl"],
+        "SDC_FILE": [":training_tile_v6.sdc"],
+    },
+    verilog_files = [":training_tile_v6.v"],
+)
+
+orfs_gds(
+    name = "training_tile_v6_gds",
+    klayout = ":klayout_local",
+    src = ":training_tile_v6_final",
+)
+
+# ASAP7 predictive 7 nm PPA harnesses for the numerics study (docs/numerics-study.md).
+[orfs_flow(
+    name = top,
+    arguments = {
+        "CORE_UTILIZATION": "40",
+        "PLACE_DENSITY": "0.60",
+    },
+    pdk = "@orfs//flow:asap7",
+    sources = {"SDC_FILE": [":ppa_asap7.sdc"]},
+    verilog_files = [":" + top + ".v"],
+) for top in [
+    "ppa_fma_bf16",
+    "ppa_dot8_bf16",
+    "ppa_dot8_e4m3",
+    "ppa_dot8_e5m2",
+    "ppa_dot8_int8",
+    "ppa_dot32_mxfp8",
+    "ppa_dot32_mxfp4",
+]]

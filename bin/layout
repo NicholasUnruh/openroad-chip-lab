@@ -1,9 +1,36 @@
 #!/bin/sh
 set -eu
 
+if [ "$#" -gt 1 ]; then
+    printf 'error: expected at most one design\nhelp: bin/layout [mac8|training_tile_v4|training_tile_v6]\n'
+    exit 2
+fi
+case "${1:-mac8}" in
+    --help) printf 'usage: bin/layout [mac8|training_tile_v4|training_tile_v6]\ndefault: mac8\nhelp: run make layout-training TRAINING_TOP=<design> to synthesize and route\n'; exit 0 ;;
+    mac8|training_tile_v4|training_tile_v6) design=${1:-mac8} ;;
+    *) printf 'error: unknown design\nhelp: bin/layout [mac8|training_tile_v4|training_tile_v6]\n'; exit 2 ;;
+esac
+
 lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tool_dir=${ORFS_TOOL_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/openroad-chip-lab/bazel-orfs}
 tool_commit=a25cf9abcdc753b25e5e2d28487844556d8e6db2
+source_file="$lab_dir/rtl/mac8.v"
+constraint_file="$lab_dir/constraints/sky130hd.sdc"
+constraint_name=constraints.sdc
+output_dir="$lab_dir/build/layout"
+if [ "$design" != mac8 ]; then
+    source_file="$lab_dir/build/$design.v"
+    constraint_file="$lab_dir/constraints/$design.sdc"
+    constraint_name="$design.sdc"
+    case "$design" in
+        training_tile_v4) output_dir="$lab_dir/build/layout-training-v4" ;;
+        training_tile_v6) output_dir="$lab_dir/build/layout-training-v6" ;;
+    esac
+    if [ ! -s "$source_file" ]; then
+        printf 'error: training netlist is missing\nhelp: run make layout-training TRAINING_TOP=<design> for the selected design\n'
+        exit 1
+    fi
+fi
 
 command -v bazelisk >/dev/null 2>&1 || { printf '%s\n' 'bazelisk is required' >&2; exit 1; }
 klayout_bin=$(command -v klayout) || { printf '%s\n' 'real KLayout is required for GDS' >&2; exit 1; }
@@ -25,36 +52,39 @@ if [ "$(git -C "$tool_dir" rev-parse HEAD)" != "$tool_commit" ]; then
 fi
 
 mkdir -p "$tool_dir/chip-lab"
-for filename in mac8.v constraints.sdc BUILD.bazel klayout_local.sh; do
+for filename in "$design.v" "$constraint_name" BUILD.bazel klayout_local.sh scratchpad_pdn.tcl scratchpad_macro.tcl; do
     if [ -L "$tool_dir/chip-lab/$filename" ]; then
         printf '%s\n' "Refusing to overwrite symlink: $tool_dir/chip-lab/$filename" >&2
         exit 1
     fi
 done
-cp "$lab_dir/rtl/mac8.v" "$tool_dir/chip-lab/mac8.v"
-cp "$lab_dir/constraints/sky130hd.sdc" "$tool_dir/chip-lab/constraints.sdc"
+cp "$source_file" "$tool_dir/chip-lab/$design.v"
+cp "$constraint_file" "$tool_dir/chip-lab/$constraint_name"
 cp "$lab_dir/tools/orfs/BUILD.bazel" "$tool_dir/chip-lab/BUILD.bazel"
+cp "$lab_dir/tools/orfs/scratchpad_pdn.tcl" "$lab_dir/tools/orfs/scratchpad_macro.tcl" "$tool_dir/chip-lab/"
 printf '#!/bin/sh\nexec "%s" "$@"\n' "$klayout_bin" > "$tool_dir/chip-lab/klayout_local.sh"
 chmod +x "$tool_dir/chip-lab/klayout_local.sh"
 
 cd "$tool_dir"
-bazelisk build //chip-lab:mac8_gds --jobs="${ORFS_JOBS:-4}"
+bazelisk build "//chip-lab:${design}_gds" --jobs="${ORFS_JOBS:-4}"
 
-gds_file="$tool_dir/bazel-bin/chip-lab/results/sky130hd/mac8/base/6_final.gds"
+gds_file="$tool_dir/bazel-bin/chip-lab/results/sky130hd/$design/base/6_final.gds"
 if [ ! -s "$gds_file" ]; then
     printf '%s\n' "GDS output is missing or empty: $gds_file" >&2
     exit 1
 fi
 
-mkdir -p "$lab_dir/build/layout"
-for filename in mac8.gds timing.rpt router_drc.rpt; do
-    if [ -L "$lab_dir/build/layout/$filename" ]; then
+mkdir -p "$output_dir"
+for filename in "$design.gds" timing.rpt router_drc.rpt metrics.json; do
+    if [ -L "$output_dir/$filename" ]; then
         printf '%s\n' "Refusing to overwrite a symlink: $filename" >&2
         exit 1
     fi
 done
-install -m 0644 "$gds_file" "$lab_dir/build/layout/mac8.gds"
-report_dir="$tool_dir/bazel-bin/chip-lab/reports/sky130hd/mac8/base"
-install -m 0644 "$report_dir/6_finish.rpt" "$lab_dir/build/layout/timing.rpt"
-install -m 0644 "$report_dir/5_route_drc.rpt" "$lab_dir/build/layout/router_drc.rpt"
-printf 'GDS: %s\n' "$lab_dir/build/layout/mac8.gds"
+install -m 0644 "$gds_file" "$output_dir/$design.gds"
+report_dir="$tool_dir/bazel-bin/chip-lab/reports/sky130hd/$design/base"
+install -m 0644 "$report_dir/6_finish.rpt" "$output_dir/timing.rpt"
+install -m 0644 "$report_dir/5_route_drc.rpt" "$output_dir/router_drc.rpt"
+install -m 0644 "$tool_dir/bazel-bin/chip-lab/logs/sky130hd/$design/base/6_report.json" "$output_dir/metrics.json"
+python3 "$lab_dir/tools/check_layout.py" "$output_dir"
+printf 'GDS: %s\n' "$output_dir/$design.gds"

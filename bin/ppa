@@ -1,0 +1,43 @@
+#!/bin/sh
+# Route one ASAP7 PPA harness through ORFS and keep its final metrics (docs/numerics-study.md).
+set -eu
+
+usage='usage: bin/ppa <harness>   e.g. bin/ppa ppa_dot8_bf16
+help: run make ppa PPA_TOP=<harness> to flatten the RTL first'
+if [ "$#" -ne 1 ] || [ "$1" = --help ]; then
+    printf '%s\n' "$usage"
+    [ "${1:-}" = --help ] && exit 0
+    exit 2
+fi
+design=$1
+case "$design" in
+    ppa_*) ;;
+    *) printf 'error: harness names start with ppa_\n%s\n' "$usage"; exit 2 ;;
+esac
+
+lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+tool_dir=${ORFS_TOOL_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/openroad-chip-lab/bazel-orfs}
+netlist="$lab_dir/build/ppa/$design.v"
+output_dir="$lab_dir/build/ppa/$design"
+[ -s "$netlist" ] || { printf 'error: %s is missing\nhelp: run make ppa PPA_TOP=%s\n' "$netlist" "$design"; exit 1; }
+[ -d "$tool_dir/chip-lab" ] || { printf 'error: tool checkout missing\nhelp: run make layout once to create it\n'; exit 1; }
+
+for filename in "$design.v" ppa_asap7.sdc BUILD.bazel; do
+    if [ -L "$tool_dir/chip-lab/$filename" ]; then
+        printf '%s\n' "Refusing to overwrite symlink: $tool_dir/chip-lab/$filename" >&2
+        exit 1
+    fi
+done
+cp "$netlist" "$tool_dir/chip-lab/$design.v"
+cp "$lab_dir/constraints/ppa_asap7.sdc" "$lab_dir/tools/orfs/BUILD.bazel" "$tool_dir/chip-lab/"
+
+cd "$tool_dir"
+bazelisk build "//chip-lab:${design}_final" --jobs="${ORFS_JOBS:-4}"
+
+mkdir -p "$output_dir"
+base="$tool_dir/bazel-bin/chip-lab"
+install -m 0644 "$base/logs/asap7/$design/base/6_report.json" "$output_dir/metrics.json"
+install -m 0644 "$base/reports/asap7/$design/base/6_finish.rpt" "$output_dir/timing.rpt"
+install -m 0644 "$base/reports/asap7/$design/base/5_route_drc.rpt" "$output_dir/router_drc.rpt"
+python3 "$lab_dir/tools/check_layout.py" "$output_dir"
+printf 'metrics: %s\n' "$output_dir/metrics.json"

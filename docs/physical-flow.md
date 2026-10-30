@@ -17,6 +17,8 @@ bazelisk run //chip-lab:mac8_final open_final
 
 Verified 2026-09-12 against code commit `bccbc7b`: the SKY130HD run used a 20 ns clock at the platform's typical 25 C, 1.8 V corner. Its final report showed 13.67 ns worst setup slack and 0.50 ns hold slack; detailed routing ended at zero router DRC errors and zero antenna violations. KLayout opened the 752,896-byte GDS as a 101.53 x 101.53 um `mac8` top cell. These are flow results under this lab's constraints, not independent signoff.
 
+`bin/layout` rejects missing metrics, negative setup/hold slack, timing/electrical violations or a nonempty router DRC report. Antenna checks and foundry signoff remain separate.
+
 `mac8_gds` explicitly selects a wrapper for the real KLayout executable; Bazel's strict action environment may omit `~/.local/bin` from `PATH`. The default bazel-orfs mock writes a dummy file, so keep this override in `tools/orfs/BUILD.bazel`.
 
 The flow produces a core layout, not a complete chip. A fabrication package also needs a pad frame and ESD, power integration, foundry-specific DRC/LVS, timing and signal-integrity signoff, and acceptance by a fabrication service. The [open SKY130 PDK](https://skywater-pdk.readthedocs.io/en/main/) describes itself as an experimental preview suitable for test-chip work, not production signoff. Keep each gate distinct.
