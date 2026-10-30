@@ -13,6 +13,6 @@ cd third_party/hardfloat
 sha256sum -c SHA256SUMS
 ```
 
-The lab fixes round-to-nearest-even and tininess detection after rounding. RISC-V specialization canonicalizes NaNs. See [the module documentation](https://www.jhauser.us/arithmetic/HardFloat-1/doc/HardFloat-Verilog.html) and [the training tile interface](../../docs/training-tile.md).
+The lab fixes round-to-nearest-even and tininess detection after rounding. RISC-V specialization canonicalizes NaNs. See [the module documentation](https://www.jhauser.us/arithmetic/HardFloat-1/doc/HardFloat-Verilog.html) and [the training tile interface](../../docs/training-v4-interface.md).
 
 The Verilator configuration in `tb/hardfloat.vlt` suppresses implicit-width diagnostics only inside this unmodified dependency; lab RTL diagnostics remain enabled.
