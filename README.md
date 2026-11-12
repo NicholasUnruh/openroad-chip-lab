@@ -1,11 +1,12 @@
 # OpenROAD Chip Lab
 
-BF16 training-accelerator tiles in Verilog, carried from RTL through bit-exact verification to routed SKY130HD layout with OpenROAD, plus an ASAP7 study of which number format a training MAC should use.
+BF16 and MXFP8 training-accelerator tiles in Verilog, carried from RTL through bit-exact verification to routed SKY130HD layout with OpenROAD, plus an ASAP7 study of which number format a training MAC should use.
 
-| Tile | BF16 MACs/clock | 32³ GEMM, clocks | Verification (RTL and Yosys netlist) | SKY130HD layout at 25 ns |
+| Tile | MACs/clock | 32³ GEMM, clocks | Verification (RTL and Yosys netlist) | SKY130HD layout at 25 ns |
 | --- | ---: | ---: | --- | --- |
-| `training_tile_v4` (default) | 8 | 4,480 | 1,833 functional/training jobs each, bit-compared with FP32 `std::fma` | 716,253 µm² standard cells; setup +7.49368 ns, hold +0.33452 ns; zero routing, antenna and electrical violations |
-| `training_tile_v6` | 32 | 2,181 | 467 GEMMs each | [V6 results](docs/training-v6-results.md) |
+| `training_tile_v4` (default) | 8 BF16 | 4,480 | 1,833 functional/training jobs each, bit-compared with FP32 `std::fma` | 716,253 µm² standard cells; setup +7.49368 ns, hold +0.33452 ns; zero routing, antenna and electrical violations |
+| `training_tile_v6` | 32 BF16 | 2,181 | 467 GEMMs each | [V6 results](docs/training-v6-results.md) |
+| `training_tile_v7` | 64 MXFP8 | 1,616 | 181 GEMMs each; the study's training run on the tile matches the C++ model bit for bit | Routing ([V7 results](docs/v7-results.md)) |
 
 At ASAP7 (predictive 7 nm), against a BF16 8-term dot product, an MXFP6 E2M3 32-term block dot product gives 4.0× the throughput per mm² and 3.4× the MACs per joule and trains within 1% of FP32 (+0.64%); MXFP8 gives 1.9× and 2.3× with more margin (+0.37%). MXFP4 and NVFP4 are denser but miss the gate. See [numerics results](docs/numerics-results.md).
 
