@@ -2,13 +2,13 @@
 set -eu
 
 if [ "$#" -gt 1 ]; then
-    printf 'error: expected at most one design\nhelp: bin/layout [mac8|training_tile_v4|training_tile_v6]\n'
+    printf 'error: expected at most one design\nhelp: bin/layout [mac8|training_tile_v4|training_tile_v6|training_tile_v7]\n'
     exit 2
 fi
 case "${1:-mac8}" in
-    --help) printf 'usage: bin/layout [mac8|training_tile_v4|training_tile_v6]\ndefault: mac8\nhelp: run make layout-training TRAINING_TOP=<design> to synthesize and route\n'; exit 0 ;;
-    mac8|training_tile_v4|training_tile_v6) design=${1:-mac8} ;;
-    *) printf 'error: unknown design\nhelp: bin/layout [mac8|training_tile_v4|training_tile_v6]\n'; exit 2 ;;
+    --help) printf 'usage: bin/layout [mac8|training_tile_v4|training_tile_v6|training_tile_v7]\ndefault: mac8\nhelp: run make layout-training TRAINING_TOP=<design> to synthesize and route\n'; exit 0 ;;
+    mac8|training_tile_v4|training_tile_v6|training_tile_v7) design=${1:-mac8} ;;
+    *) printf 'error: unknown design\nhelp: bin/layout [mac8|training_tile_v4|training_tile_v6|training_tile_v7]\n'; exit 2 ;;
 esac
 
 lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -25,6 +25,7 @@ if [ "$design" != mac8 ]; then
     case "$design" in
         training_tile_v4) output_dir="$lab_dir/build/layout-training-v4" ;;
         training_tile_v6) output_dir="$lab_dir/build/layout-training-v6" ;;
+        training_tile_v7) output_dir="$lab_dir/build/layout-training-v7" ;;
     esac
     if [ ! -s "$source_file" ]; then
         printf 'error: training netlist is missing\nhelp: run make layout-training TRAINING_TOP=<design> for the selected design\n'
