@@ -1,6 +1,8 @@
 // PPA harness: registered inputs around one fused BF16 dot-product unit (8 MACs per clock);
-// the unit registers its own outputs.
-module ppa_dot8_bf16 (
+// the unit registers its own outputs. FRAME is the unit's alignment width (make ppa PPA_TOP=ppa_dot8_bf16_f<N>).
+module ppa_dot8_bf16 #(
+    parameter FRAME = 32
+) (
     input wire clk,
     input wire [127:0] a, b,
     input wire [31:0] c,
@@ -9,7 +11,7 @@ module ppa_dot8_bf16 (
 );
     reg [127:0] a_r, b_r;
     reg [31:0] c_r;
-    fp_dot8_fp32 #(.FORMAT(0)) unit (
+    fp_dot8_fp32 #(.FORMAT(0), .FRAME(FRAME)) unit (
         .clk(clk), .a(a_r), .b(b_r), .c(c_r), .result(result), .exception_flags(exception_flags)
     );
     always @(posedge clk) begin

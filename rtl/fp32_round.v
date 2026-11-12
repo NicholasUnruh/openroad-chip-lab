@@ -48,7 +48,10 @@ module fp32_round #(
         sign_a <= sign;
         // The round bit is mag[shift-1] and sticky is any lower set bit. Bits dropped before
         // the frame only make the result inexact; they never change the rounding direction.
+        // When MW is a power of two the index is one bit wider than mag needs; shift <= MW keeps it in range.
+        /* verilator lint_off WIDTHTRUNC */
         round_a <= shift > 0 && shift <= MW12 && mag[shift[LW-1:0] - 1'b1];
+        /* verilator lint_on WIDTHTRUNC */
         sticky_a <= shift > 0 && $signed({{(12-LW){1'b0}}, trailing}) < shift - 12'sd1;
         dropped_a <= sticky_in;
         tiny_a <= $signed({{(12-LW){1'b0}}, lead}) + lsb_exp < -12'sd126;

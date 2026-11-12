@@ -83,18 +83,32 @@ check-training-v6-structure:
 	$(MAKE) check-training-structure TRAINING_TOP=training_tile_v6
 
 # ASAP7 PPA harnesses: flatten with Yosys, then run ORFS to route (bin/ppa).
-.PHONY: ppa
+# ppa_dot8_bf16_f<N> is the BF16 dot8 harness with a FRAME of N bits.
+.PHONY: ppa ppa-netlist ppa-all
 PPA_TOP ?= ppa_dot8_bf16
-PPA_RTL = rtl/ppa/$(PPA_TOP).v rtl/fp_dot8_fp32.v rtl/fp32_round.v rtl/int8_dot8_int32.v rtl/mx_dot32_fp32.v rtl/fp32_accum_fma_pipe.v $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
-ppa:
-	mkdir -p build/ppa
-	yosys -Q -T -l build/ppa/$(PPA_TOP)_synth.log -p 'read_verilog $(TRAINING_INCLUDES) $(PPA_RTL); synth -top $(PPA_TOP) -flatten; check -assert; splitnets; write_verilog -noattr build/ppa/$(PPA_TOP).v'
+PPA_FRAME = $(patsubst ppa_dot8_bf16_f%,%,$(filter ppa_dot8_bf16_f%,$(PPA_TOP)))
+PPA_MODULE = $(if $(PPA_FRAME),ppa_dot8_bf16,$(PPA_TOP))
+PPA_RTL = rtl/ppa/$(PPA_MODULE).v rtl/fp_dot8_fp32.v rtl/fp32_round.v rtl/int8_dot8_int32.v rtl/mx_dot32_fp32.v rtl/fp32_accum_fma_pipe.v $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
+ppa: ppa-netlist
 	./bin/ppa $(PPA_TOP)
+ppa-netlist:
+	mkdir -p build/ppa
+	yosys -Q -T -l build/ppa/$(PPA_TOP)_synth.log -p 'read_verilog $(TRAINING_INCLUDES) $(PPA_RTL); $(if $(PPA_FRAME),chparam -set FRAME $(PPA_FRAME) ppa_dot8_bf16;) synth -top $(PPA_MODULE) -flatten; $(if $(PPA_FRAME),rename ppa_dot8_bf16 $(PPA_TOP);) check -assert; splitnets; write_verilog -noattr build/ppa/$(PPA_TOP).v'
+# Every study design point: flatten, route in one Bazel build, then routed power.
+PPA_HARNESSES = ppa_fma_bf16 ppa_dot8_bf16 ppa_dot8_bf16_f24 ppa_dot8_bf16_f28 ppa_dot8_bf16_f36 \
+	ppa_dot8_bf16_f40 ppa_dot8_e4m3 ppa_dot8_e5m2 ppa_dot8_int8 ppa_dot32_mxfp8 ppa_dot32_mxfp4
+ppa-all:
+	for top in $(PPA_HARNESSES); do $(MAKE) ppa-netlist PPA_TOP=$$top || exit 1; done
+	./bin/ppa $(PPA_HARNESSES)
+	for top in $(PPA_HARNESSES); do tools/ppa_power.sh $$top || exit 1; done
 
 .PHONY: sim-dot8 sim-dot8-format sim-int8-dot8 sim-mx sim-mx-elem
-# Dot-product unit in each input format: 0 = BF16, 1 = OCP FP8 E4M3, 2 = OCP FP8 E5M2.
+# Dot-product unit in each input format: 0 = BF16, 1 = OCP FP8 E4M3, 2 = OCP FP8 E5M2;
+# then the BF16 unit at the other alignment-frame widths of the numerics study.
+DOT8_FRAME ?= 32
 sim-dot8:
 	for format in 0 1 2; do $(MAKE) sim-dot8-format DOT8_FORMAT=$$format || exit 1; done
+	for frame in 24 28 36 40; do $(MAKE) sim-dot8-format DOT8_FORMAT=0 DOT8_FRAME=$$frame || exit 1; done
 sim-int8-dot8:
 	verilator --cc --exe --build -j 4 --top-module int8_dot8_int32 --Mdir build/int8-dot8-sim \
 		rtl/int8_dot8_int32.v $(CURDIR)/tb/int8_dot8_test.cpp -CFLAGS '-std=c++17 -O2'
@@ -109,12 +123,28 @@ sim-mx-elem:
 	./build/mx-$(MX_ELEM)-sim/Vmx_dot32_fp32
 sim-dot8-format:
 	mkdir -p build
-	verilator --cc --exe --build -j 4 --top-module fp_dot8_fp32 -GFORMAT=$(DOT8_FORMAT) \
-		--Mdir build/dot8-$(DOT8_FORMAT)-sim rtl/fp_dot8_fp32.v rtl/fp32_round.v $(CURDIR)/tb/fp_dot8_test.cpp \
-		-CFLAGS '-std=c++17 -O2 -fno-fast-math -DDOT8_FORMAT=$(DOT8_FORMAT)'
-	./build/dot8-$(DOT8_FORMAT)-sim/Vfp_dot8_fp32
+	verilator --cc --exe --build -j 4 --top-module fp_dot8_fp32 -GFORMAT=$(DOT8_FORMAT) -GFRAME=$(DOT8_FRAME) \
+		--Mdir build/dot8-$(DOT8_FORMAT)-f$(DOT8_FRAME)-sim rtl/fp_dot8_fp32.v rtl/fp32_round.v $(CURDIR)/tb/fp_dot8_test.cpp \
+		-CFLAGS '-std=c++17 -O2 -fno-fast-math -DDOT8_FORMAT=$(DOT8_FORMAT) -DDOT8_FRAME=$(DOT8_FRAME)'
+	./build/dot8-$(DOT8_FORMAT)-f$(DOT8_FRAME)-sim/Vfp_dot8_fp32
 
 check-training-structure:
 	mkdir -p build
 	yosys -Q -T -l $(TRAINING_BUILD)_structure.log -p '$(TRAINING_READ_MACROS) read_verilog $(TRAINING_INCLUDES) $(TRAINING_RTL); hierarchy -top $(TRAINING_TOP); proc; flatten; opt; wreduce; opt_clean; write_json $(TRAINING_BUILD)_structure.json'
 	python3 tb/check_bf16_structure.py $(TRAINING_BUILD)_structure.json $(TRAINING_TOP)
+
+# Numerics study accuracy (M4): GEMM error against FP64 and the bit-exact training emulation,
+# GEMM error beside five training recipes at a time (six processes).
+.PHONY: numerics
+NUMERICS_DEPS = tools/numerics/datapaths.h tb/dot8_model.h tb/mx_model.h
+TRAIN_RECIPES = fp32 bf16_fma bf16_dot8 bf16_dot8_f24 bf16_dot8_f28 bf16_dot8_f36 bf16_dot8_f40 \
+	fp8_tensor mxfp8 mxfp4_fwd_mxfp8_bwd mxfp4
+build/%: tools/numerics/%.cpp $(NUMERICS_DEPS)
+	mkdir -p build
+	g++ $(TRAINING_CFLAGS) -o $@ $<
+numerics: build/gemm_error build/train_mlp
+	mkdir -p build/numerics
+	./build/gemm_error > build/numerics/gemm_error.txt & \
+	printf '%s\n' $(TRAIN_RECIPES) | xargs -P 5 -I{} sh -c './build/train_mlp 3000 3 {} > build/numerics/train_{}.txt'; \
+	wait
+	cat build/numerics/train_*.txt | grep '^final'

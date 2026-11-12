@@ -26,7 +26,7 @@ Frame-width variants of `dot8_bf16` (24–40 bits) measure how much accumulator 
 
 ## Endpoint
 
-One results table per metric across all design points, plus the accuracy result, in `docs/numerics-results.md`. ASAP7 is predictive. Compare design points relative to each other; never quote these as foundry figures.
+One results table per metric across all design points, plus the accuracy result, in [numerics-results.md](numerics-results.md) (reached 2026-11-11). The training tolerance is 1% of FP32's mean final test loss; the plan left it unset, so the value was fixed with the results. ASAP7 is predictive. Compare design points relative to each other; never quote these as foundry figures.
 
 ## Milestones
 

@@ -95,9 +95,10 @@ inline uint32_t round_fp32(bool sign, uint64_t mag, int lsb, bool &inexact, bool
 
 }  // namespace dot8
 
-// The specification: 32-bit frame below the largest term's top, truncation, one rounding.
+// The specification: a frame of `frame` bits (RTL FRAME, 24 to 40) below the largest term's top,
+// truncation, one rounding.
 inline Dot8Result dot8_spec(const std::array<uint16_t, 8> &a, const std::array<uint16_t, 8> &b, uint32_t c,
-                            Dot8Format f = dot8_bf16) {
+                            Dot8Format f = dot8_bf16, int frame = 32) {
     using namespace dot8;
     Terms t = terms(a, b, c, f);
     if (t.nan || t.invalid) return {canonical_nan, t.invalid ? 16u : 0u, false};
@@ -110,16 +111,16 @@ inline Dot8Result dot8_spec(const std::array<uint16_t, 8> &a, const std::array<u
     bool truncated = false;
     for (const Term &x : t.term) {
         if (!x.sig) continue;
-        uint64_t justified = uint64_t(x.sig) << (32 - x.width);
+        uint64_t justified = uint64_t(x.sig) << (frame - int(x.width));
         int distance = top - (x.lsb + int(x.width));
-        uint64_t aligned = distance >= 32 ? 0 : justified >> distance;
-        truncated |= distance >= 32 ? justified != 0 : (aligned << distance) != justified;
+        uint64_t aligned = distance >= frame ? 0 : justified >> distance;
+        truncated |= distance >= frame ? justified != 0 : (aligned << distance) != justified;
         sum += x.sign ? -int64_t(aligned) : int64_t(aligned);
     }
     if (sum == 0) return {0u, truncated ? 1u : 0u, truncated};
     bool inexact, tiny;
     uint64_t mag = sum < 0 ? uint64_t(-sum) : uint64_t(sum);
-    uint32_t bits = round_fp32(sum < 0, mag, top - 32, inexact, tiny);
+    uint32_t bits = round_fp32(sum < 0, mag, top - frame, inexact, tiny);
     inexact |= truncated;
     bool overflow = (bits & 0x7fffffffu) == 0x7f800000u;
     return {bits, (overflow ? 4u : 0u) | (tiny && inexact ? 2u : 0u) | (inexact ? 1u : 0u), truncated};

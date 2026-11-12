@@ -1,6 +1,6 @@
 # Fused dot-product results
 
-Verified 2026-10-19 against `13fa6a8` RTL (unit later parameterized in `e70d113`, bit-identical for BF16): V6 routes in SKY130HD at 40 MHz with four times V4's multiply-accumulates in 4.6% more standard-cell area. It is not antenna-clean.
+Verified 2026-10-19 against `13fa6a8` RTL (unit later parameterized in `e70d113`, bit-identical for BF16): V6 routes in SKY130HD at 40 MHz with four times V4's multiply-accumulates in 4.6% more standard-cell area. It is not antenna-clean. The physical figures predate the two dot-product pipeline stages added for the ASAP7 study; current V6 RTL has not been re-routed in SKY130HD.
 
 ## Physical results
 
@@ -17,13 +17,14 @@ Slew, capacitance, fanout and router DRC checks pass. Detailed routing converged
 
 ## Throughput per area
 
-At 40 MHz with ideal 32-bit host ports (cycle counts from RTL and generic-netlist simulation):
+At 40 MHz with ideal 32-bit host ports (cycle counts from RTL and generic-netlist simulation of the current RTL; the dot-product unit's two extra pipeline stages for the ASAP7 study, `7ee910d` and `d742fda`, added 16 clocks to the 2,165 measured at `13fa6a8`):
 
 | Metric | V4 | V6 |
 | --- | ---: | ---: |
-| 32³ GEMM clocks | 4,480 | 2,165 |
-| FLOP/clock/mm², 32³, total area | 20.4 | 20.6 |
-| FLOP/clock/mm², 32³, standard cells only | 20.4 | 40.4 |
+| 32³ GEMM clocks | 4,480 | 2,181 |
+| Eight pipelined 16³ GEMMs, clocks | — | 2,720 |
+| FLOP/clock/mm², 32³, total area | 20.4 | 20.4 |
+| FLOP/clock/mm², 32³, standard cells only | 20.4 | 40.1 |
 | Peak FLOP/clock/mm², total area | 22.3 | 43.5 |
 
 The datapath is much denser, but V6's SRAM macro, at about 176 µm² per byte, cancels the gain at the ideal port. The scratchpad pays for itself only when the host link is narrower than 32 bits each way. The 1,024-clock scratchpad fill bounds the 32³ result.
