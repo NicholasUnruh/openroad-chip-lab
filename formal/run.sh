@@ -3,7 +3,8 @@
 # per element type, MODE 0 (products), MODE 2 (specials) and one MODE 1 (alignment) case per c
 # exponent across the range where c and the block sum interact, with 26 binades of margin each side.
 # Writes build/formal/summary.txt (one line per case) and exits 1 unless every case passes.
-# usage: formal/run.sh [jobs] [elem...]   (needs SymbiYosys and Bitwuzla on PATH)
+# usage: [STRIDE=n] formal/run.sh [jobs] [elem...]   (needs SymbiYosys and Bitwuzla on PATH)
+# STRIDE=n checks every n-th c exponent plus both ends of the range.
 set -eu
 lab=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 out="$lab/build/formal"
@@ -60,7 +61,8 @@ for elem in $elems; do
     d=$1
     while [ "$d" -le "$2" ]; do
         echo "$elem 1 $((127 + d))"
-        d=$((d + 1))
+        [ "$d" -lt "$2" ] && [ $((d + ${STRIDE:-1})) -gt "$2" ] && echo "$elem 1 $((127 + $2))"
+        d=$((d + ${STRIDE:-1}))
     done
 done | xargs -P "$jobs" -L 1 "$0" --case | tee "$out/summary.txt"
 total=$(wc -l < "$out/summary.txt")
