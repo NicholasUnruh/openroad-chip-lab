@@ -54,9 +54,9 @@ Values come from each tile's `build/layout*/metrics.json`; fmax is the flow's ti
 
 *Setup and hold slack of all 20,616 V6 endpoints from OpenSTA on the final netlist and SPEF; worst setup +5.06 ns and hold +0.17 ns match the flow's metrics. V4's endpoint reports were not kept, so only its worst setup slack is marked.*
 
-![Standard-cell area by module, V4 and V6](img/area-by-module.png)
+![Standard-cell area by module, V4, V6 and V7](img/area-by-module.png)
 
-*Area by module after hierarchical Yosys/ABC mapping to SKY130HD (before placement, so below the routed totals). V6's SRAM macro is shown at its placed area.*
+*Area by module after hierarchical Yosys/ABC mapping to SKY130HD (before placement, so below the routed totals). The SRAM macro is shown at its placed area. V7's two MXFP8 units do 64 MACs a clock in less area than V6's four BF16 units do 32; the tile logic around them grows by 153k µm². It holds 4,352 more operand-register bits than V6: A and B blocks twice as deep, plus their scales.*
 
 Regenerate the figures from the build outputs:
 

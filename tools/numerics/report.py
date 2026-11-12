@@ -1,7 +1,8 @@
 """Print the numerics-study tables (docs/numerics-results.md) from routed metrics and accuracy runs.
 
-Reads build/ppa/<harness>/{metrics.json,power.txt} (make ppa-all) and results/numerics/
-{gemm_error.txt,train_*.txt} (make numerics). ASAP7 figures are predictive: compare rows with each
+Reads build/ppa/<harness>/{metrics.json,power.txt} (make ppa-all), the SKY130HD reruns in
+build/ppa-sky130hd/ (make ppa-sky130) and results/numerics/{gemm_error.txt,train_*.txt}
+(make numerics). ASAP7 figures are predictive: compare rows with each
 other, never with foundry data.
 
 usage: python3 tools/numerics/report.py
@@ -32,12 +33,16 @@ POINTS = [
     ("ppa_dot32_nvfp4", 32, ("nvfp4", "nvfp4_sr")),
     ("ppa_dot8_int8", 8, ()),
 ]
+# Units routed in both PDKs, to test whether the ASAP7 ranking holds in SKY130HD.
+SKY130_POINTS = ["ppa_dot8_bf16", "ppa_dot32_mxfp8", "ppa_dot32_mxfp6_e2m3"]
 # Training passes when its mean final test loss is within this fraction of FP32's.
 LOSS_TOLERANCE = 0.01
 
 
-def ppa(harness, macs):
-    directory = ROOT / "build/ppa" / harness
+def ppa(harness, macs, build="build/ppa"):
+    # Power is reported at the simulated 1 GHz clock in both PDKs; energy per MAC does not
+    # depend on that rate.
+    directory = ROOT / build / harness
     m = json.loads((directory / "metrics.json").read_text())
     total = None
     for line in (directory / "power.txt").read_text().splitlines():
@@ -151,6 +156,28 @@ def main(argv):
         print(
             f"| {rank if usable else '—'} | `{harness[4:]}` | {trains} | {p['gmacs_mm2']:.0f} | "
             f"{p['gmacs_mm2'] / base['gmacs_mm2']:.2f} | {p['macs_nj']:.0f} | {p['macs_nj'] / base['macs_nj']:.2f} |"
+        )
+
+    print("\n## ASAP7 prediction vs SKY130HD measurement (relative to `dot8_bf16` in the same PDK)\n")
+    macs = {h: m for h, m, _ in POINTS}
+    sky = {h: ppa(h, macs[h], "build/ppa-sky130hd") for h in SKY130_POINTS}
+    print(
+        "| Point | SKY130 area/MAC µm² | SKY130 fmax MHz | SKY130 energy pJ/MAC | "
+        "Area/MAC gain ASAP7 → SKY130 | Energy/MAC gain ASAP7 → SKY130 | "
+        "Throughput/mm² gain ASAP7 → SKY130 |"
+    )
+    print("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+    for h in SKY130_POINTS:
+        a, b = rows[h], sky[h]
+        a0, b0 = rows["ppa_dot8_bf16"], sky["ppa_dot8_bf16"]
+        gains = [
+            (a0[k] / a[k], b0[k] / b[k]) if k != "gmacs_mm2" else (a[k] / a0[k], b[k] / b0[k])
+            for k in ("area_per_mac", "fj_per_mac", "gmacs_mm2")
+        ]
+        print(
+            f"| `{h[4:]}` | {b['area_per_mac']:.0f} | {b['fmax']:.0f} | {b['fj_per_mac'] / 1e3:.2f} | "
+            + " | ".join(f"{x:.2f}× → {y:.2f}×" for x, y in gains)
+            + " |"
         )
     return 0
 

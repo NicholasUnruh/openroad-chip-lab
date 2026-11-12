@@ -1,0 +1,3 @@
+cycles=2181 macs=32768 total_power_w=6.49e-02 macro_power_w=1.44e-02
+annotated_pins=225065 unannotated_pins=1758
+energy_per_mac_pj=107.992 stdcell_energy_per_mac_pj=84.031

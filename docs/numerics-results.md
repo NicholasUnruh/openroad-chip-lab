@@ -6,6 +6,8 @@ Method: [numerics-study.md](numerics-study.md). Verified 2026-11-12 (15 routed p
 
 Among datapaths that train within the tolerance, **MXFP6 E2M3 32-term block dot products** give the most throughput per mm² (4.0× the BF16 dot8) and per joule (3.4×), and train at +0.64% test loss. **MXFP8 (E4M3)** is next at 1.9× and 2.3×, with more accuracy margin (+0.37%). Per-tensor FP8 dot8 units follow at about 1.4–1.5×. **MXFP4 is 5.7× denser but fails training** (+8.9%). NVFP4 fails too, even with stochastic rounding (+5.6%). MXFP6 E3M2 costs the same as E2M3 but fails (+2.1%): with a block scale, the extra mantissa bit matters more than exponent range. For BF16, the frame width is a free knob: narrowing the alignment frame from 32 to 24 bits saves 11% area and 6% energy, with no measurable change in error or training. Chained FMAs cost 3.3× the dot8's energy per MAC and give 0.32× its throughput per mm².
 
+**Checked in a real PDK.** BF16 dot8, MXFP8 and MXFP6 E2M3 units routed in SKY130HD keep this order, and their area and energy ratios agree with ASAP7 within 11%. In a full tile, though, MXFP8 saves only 1.2–1.6× energy per MAC over BF16, because flops and the clock tree dominate tile power ([V7 results](v7-results.md#asap7-prediction-vs-sky130hd-measurement)).
+
 ## Ranking
 
 Throughput per mm² uses the routed fmax; energy uses simulated activity at 1 GHz. Rank among the points that pass the training gate.
@@ -93,8 +95,8 @@ A 64-64-10 ReLU student learns a fixed random teacher. Every forward, dW and dX 
 | FP32 | 0.8145 | 0.0027 | 0.698 | — |
 | BF16 FMA | 0.8146 | 0.0024 | 0.697 | yes |
 | BF16 dot8, frames 24–40 | 0.8147–0.8149 | ≤0.0029 | 0.697–0.699 | yes |
-| FP8 per-tensor (E4M3 / E5M2) | 0.8214 | 0.0055 | 0.694 | yes (+0.85%) |
-| MXFP8 | 0.8176 | 0.0051 | 0.696 | yes (+0.38%) |
+| FP8 per-tensor (E4M3 / E5M2) | 0.8214 | 0.0055 | 0.694 | yes (+0.84%) |
+| MXFP8 | 0.8176 | 0.0051 | 0.696 | yes (+0.37%) |
 | MXFP8 / MXFP8 E5M2 gradients | 0.8193 | 0.0025 | 0.695 | yes (+0.58%) |
 | MXFP6 E2M3 | 0.8198 | 0.0020 | 0.696 | yes (+0.64%) |
 | MXFP6 E3M2 | 0.8317 | 0.0011 | 0.693 | no (+2.1%) |
@@ -112,7 +114,7 @@ Loss curves (10 points per run) are in `results/numerics/train_*.txt`; `tools/pl
 
 ## Choices and limitations
 
-- **Tolerance (gate).** The gate is 1% of FP32's mean final test loss, about 3× FP32's seed spread. Per-tensor FP8 passes at +0.85%, so it is marginal: a 0.75% gate would fail it, while MXFP8 passes either way.
+- **Tolerance (gate).** The gate is 1% of FP32's mean final test loss, about 3× FP32's seed spread. Per-tensor FP8 passes at +0.84%, so it is marginal: a 0.75% gate would fail it, while MXFP8 passes either way.
 - **Fresh batches.** Reusing a fixed 4,096-sample set for about 47 epochs overfits (train loss 0.06 against test loss 2.3), so overfitting rather than arithmetic would decide the ranking. Each step therefore draws a fresh batch and the learning rate decays.
 - **Optimistic FP8 scaling.** Per-tensor FP8 scales each tensor from its own current amax (just-in-time). Delayed scaling, which production recipes use, is likely worse.
 - **Small model.** A 64-unit MLP is far from transformer training. The training result only orders the formats and should not be read as a prediction at scale.
@@ -124,6 +126,7 @@ Loss curves (10 points per run) are in `results/numerics/train_*.txt`; `tools/pl
 ```sh
 make sim-dot8 sim-mx sim-int8-dot8   # unit correctness, all formats and frames
 make ppa-all                          # 15 routes, then power (about 1 h at ORFS_JOBS=6)
+make ppa-sky130                       # BF16, MXFP8 and E2M3 units in SKY130HD, with power
 make numerics                         # GEMM error and training emulation (about 20 min)
 python3 tools/numerics/report.py      # every table above
 ```

@@ -1,4 +1,4 @@
-"""SKY130HD standard-cell area of each submodule of the V4 and V6 tiles (hierarchical ABC mapping).
+"""SKY130HD standard-cell area of each submodule of the V4, V6 and V7 tiles (hierarchical ABC mapping).
 
 usage: python3 tools/module_area.py <sky130_fd_sc_hd__tt_025C_1v80.lib>
 
@@ -31,6 +31,11 @@ TILES = {
     "training_tile_v6": [
         "rtl/training_tile_v6.v",
         "rtl/fp_dot8_fp32.v",
+        "rtl/fp32_round.v",
+    ],
+    "training_tile_v7": [
+        "rtl/training_tile_v7.v",
+        "rtl/mx_dot32_fp32.v",
         "rtl/fp32_round.v",
     ],
 }
