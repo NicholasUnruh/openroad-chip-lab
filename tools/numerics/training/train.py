@@ -33,13 +33,11 @@ import mx
 PAUSED = 75
 FORMATS = {"bf16": None, **mx.FORMATS}
 
-# Processes that are always on the GPU for the Windows desktop; anything else means someone is
-# using the machine and the run yields.
+# Processes that sit on the GPU for the Windows desktop: every program under C:\Windows\ (shell
+# hosts come and go) plus these. Anything else means someone is using the machine; the run yields.
 DESKTOP = (
-    "dwm.exe", "explorer.exe", "ShellHost.exe", "SearchHost.exe", "StartMenuExperienceHost.exe",
-    "TextInputHost.exe", "LockApp.exe", "ApplicationFrameHost.exe", "SystemSettings.exe",
-    "CrossDeviceResume.exe", "msedgewebview2.exe", "NVIDIA Overlay.exe", "PhoneExperienceHost.exe",
-    "copilotapp.exe", "copilotapphost.exe", "[Insufficient Permissions]", "[Not Found]",
+    "msedgewebview2.exe", "NVIDIA Overlay.exe", "PhoneExperienceHost.exe", "copilotapp.exe",
+    "copilotapphost.exe", "[Insufficient Permissions]", "[Not Found]",
 )  # fmt: skip
 
 
@@ -52,8 +50,9 @@ def foreign_gpu_process() -> str | None:
     except (OSError, subprocess.TimeoutExpired):
         return None  # not on the shared Windows machine
     for line in out.splitlines():
-        name = line.strip().replace("\\", "/").rsplit("/", 1)[-1]
-        if name and name not in DESKTOP:
+        path = line.strip().replace("\\", "/")
+        name = path.rsplit("/", 1)[-1]
+        if name and name not in DESKTOP and not path.lower().startswith("c:/windows/"):
             return name
     return None
 
