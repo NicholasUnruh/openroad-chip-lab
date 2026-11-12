@@ -59,7 +59,7 @@ module mx_dot32_fp32 #(
     reg nan, invalid, pos_inf, neg_inf, all_zero, all_negative;
     reg a_zero, b_zero, a_inf, b_inf, a_nan, b_nan;
     reg [31:0] term_inf;
-    integer k;
+    integer k, j;
     always @* begin
         // The E8M0 NaN is 0xFF; the E4M3 NaN is S.1111.111, and E4M3 scale signs are ignored.
         nan = NV ? &nv_sa[6:0] || &nv_sa[14:8] || &nv_sb[6:0] || &nv_sb[14:8]
@@ -95,23 +95,23 @@ module mx_dot32_fp32 #(
         end
     end
     always @(posedge clk) begin
-        for (k = 0; k < 32; k = k + 1) begin
+        for (j = 0; j < 32; j = j + 1) begin
             // Infinite terms decide the result as specials; their products stay out of the sum.
-            p_s1[PW*k +: PW] <= term_inf[k] ? {PW{1'b0}} :
-                                {a[W*k+MAN +: EXP] != 0, a[W*k +: MAN]} * {b[W*k+MAN +: EXP] != 0, b[W*k +: MAN]};
-            shift_s1[SHW*k +: SHW] <= (a[W*k+MAN +: EXP] == 0 ? {{EXP{1'b0}}, 1'b1} : {1'b0, a[W*k+MAN +: EXP]}) +
-                                      (b[W*k+MAN +: EXP] == 0 ? {{EXP{1'b0}}, 1'b1} : {1'b0, b[W*k+MAN +: EXP]}) -
+            p_s1[PW*j +: PW] <= term_inf[j] ? {PW{1'b0}} :
+                                {a[W*j+MAN +: EXP] != 0, a[W*j +: MAN]} * {b[W*j+MAN +: EXP] != 0, b[W*j +: MAN]};
+            shift_s1[SHW*j +: SHW] <= (a[W*j+MAN +: EXP] == 0 ? {{EXP{1'b0}}, 1'b1} : {1'b0, a[W*j+MAN +: EXP]}) +
+                                      (b[W*j+MAN +: EXP] == 0 ? {{EXP{1'b0}}, 1'b1} : {1'b0, b[W*j+MAN +: EXP]}) -
                                       {{(SHW-2){1'b0}}, 2'd2};
-            sign_s1[k] <= a[W*k+W-1] ^ b[W*k+W-1];
+            sign_s1[j] <= a[W*j+W-1] ^ b[W*j+W-1];
         end
         scale_s1 <= NV ? FIX_LSB : $signed({4'b0, scale_a[7:0]}) + $signed({4'b0, scale_b[7:0]}) -
                                    12'sd254 + FIX_LSB;
         // NVFP4 block scales: significand product and LSB exponent of sa * sb per block.
-        for (k = 0; k < 2; k = k + 1) begin
-            scale_sig_s1[8*k +: 8] <= {nv_sa[8*k+3 +: 4] != 0, nv_sa[8*k +: 3]} *
-                                      {nv_sb[8*k+3 +: 4] != 0, nv_sb[8*k +: 3]};
-            scale_lsb_s1[6*k +: 6] <= (nv_sa[8*k+3 +: 4] == 0 ? 6'd1 : {2'b0, nv_sa[8*k+3 +: 4]}) +
-                                      (nv_sb[8*k+3 +: 4] == 0 ? 6'd1 : {2'b0, nv_sb[8*k+3 +: 4]}) -
+        for (j = 0; j < 2; j = j + 1) begin
+            scale_sig_s1[8*j +: 8] <= {nv_sa[8*j+3 +: 4] != 0, nv_sa[8*j +: 3]} *
+                                      {nv_sb[8*j+3 +: 4] != 0, nv_sb[8*j +: 3]};
+            scale_lsb_s1[6*j +: 6] <= (nv_sa[8*j+3 +: 4] == 0 ? 6'd1 : {2'b0, nv_sa[8*j+3 +: 4]}) +
+                                      (nv_sb[8*j+3 +: 4] == 0 ? 6'd1 : {2'b0, nv_sb[8*j+3 +: 4]}) -
                                       6'd20;
         end
         c_s1 <= c;
@@ -126,14 +126,14 @@ module mx_dot32_fp32 #(
     // Stages 2-3: exact block sum in fixed point as a balanced adder tree, split after the
     // third level into four registered partial sums.
     reg [32*SUMW-1:0] level;
-    integer n;
+    integer m, n;
     always @* begin
-        for (k = 0; k < 32; k = k + 1)
-            level[SUMW*k +: SUMW] = sign_s1[k] ? -({{(SUMW-PW){1'b0}}, p_s1[PW*k +: PW]} << shift_s1[SHW*k +: SHW])
-                                               : {{(SUMW-PW){1'b0}}, p_s1[PW*k +: PW]} << shift_s1[SHW*k +: SHW];
+        for (m = 0; m < 32; m = m + 1)
+            level[SUMW*m +: SUMW] = sign_s1[m] ? -({{(SUMW-PW){1'b0}}, p_s1[PW*m +: PW]} << shift_s1[SHW*m +: SHW])
+                                               : {{(SUMW-PW){1'b0}}, p_s1[PW*m +: PW]} << shift_s1[SHW*m +: SHW];
         for (n = 16; n > 2; n = n >> 1)
-            for (k = 0; k < n; k = k + 1)
-                level[SUMW*k +: SUMW] = level[SUMW*2*k +: SUMW] + level[SUMW*(2*k+1) +: SUMW];
+            for (m = 0; m < n; m = m + 1)
+                level[SUMW*m +: SUMW] = level[SUMW*2*m +: SUMW] + level[SUMW*(2*m+1) +: SUMW];
     end
     reg [4*SUMW-1:0] partial_s2;
     reg [15:0] scale_sig_s2;
@@ -202,10 +202,11 @@ module mx_dot32_fp32 #(
     reg [LW-1:0] x_lead;
     reg [XW-1:0] x_norm;
     reg signed [11:0] x_top, c_top, top, x_dist, c_dist;
+    integer i;
     always @* begin
         x_lead = {LW{1'b0}};
-        for (k = 0; k < XW; k = k + 1)
-            if (x_mag[k]) x_lead = k[LW-1:0];
+        for (i = 0; i < XW; i = i + 1)
+            if (x_mag[i]) x_lead = i[LW-1:0];
         x_norm = x_mag << (XW - 1 - x_lead);
         x_top = block_lsb_s3 + $signed({{(12-LW){1'b0}}, x_lead}) + 12'sd1;
         c_top = (ec == 8'd0 ? -12'sd149 : $signed({4'b0, ec}) - 12'sd150) + 12'sd24;
