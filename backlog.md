@@ -2,8 +2,9 @@
 
 ## In flight
 ## Queued
-- [ ] tile_perf_model - C++ cycle-level model of V4 and V6 in `model/`, matching RTL clock counts (32^3 GEMM: V4 4480, V6 2181; the 2165 recorded earlier predates the dot8 pipeline stages); then sweep lanes, buffer depth and host port width (repo: openroad-chip-lab) (queued 2026-11-11)
 ## Done
+- [x] tile_perf_model - C++ cycle-level model of V4 and V6 in `model/`, matching RTL clock counts; sweep lanes, buffer depth and host port width (repo: openroad-chip-lab) (done 2026-11-11)
+  docs/tile-perf-model.md. `make model-check` diffs all 9 V4/V6 BENCH lines against RTL exactly (V4 32^3 4480, V6 2181). V4 is write-port bound at 4 B/clk (16 lanes +5%; 16 lanes with 8 B/clk 1.89x); a third buffer adds nothing. V6 is host-bound at 4 B/clk; 8 units save <=8% because the loader feeds one job per 16 clocks; one C bank costs 47%.
 - [x] numerics_ppa_asap7 - Rank BF16/FP8/MX/INT8 MAC datapaths by area, fmax, energy and training accuracy at ASAP7 (repo: openroad-chip-lab) (done 2026-11-11)
   docs/numerics-results.md. 11 routed points (7 datapaths plus BF16 frames 24, 28, 36, 40), VCD-annotated energy, GEMM error, bit-exact training. MXFP8 ranks first among training-usable points (2.17x throughput/mm2, 2.33x MAC/J vs BF16 dot8); MXFP4 fails the 1% loss gate; BF16 frame 24 is free. Tolerance was unset in the plan and fixed at 1%; per-tensor FP8 passes marginally (+0.85%).
 - [x] retire_old_tiles - Archive scalar FP32, V2, V3 and V5 tiles; keep V4, V6, MAC8 and numerics (repo: openroad-chip-lab) (done 2026-10-30)
