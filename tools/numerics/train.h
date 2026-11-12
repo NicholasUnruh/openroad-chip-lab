@@ -2,7 +2,8 @@
 // A fixed random 64-32-10 tanh network labels Gaussian inputs; a 64-64-10 ReLU student learns
 // them with FP32 master weights and host SGD. Every step draws a fresh teacher-labelled batch, so
 // the student cannot memorize and test loss measures learning, not overfitting. Forward GEMMs use
-// the recipe's forward datapath; dW and dX GEMMs use its backward datapath. Prints the test-loss
+// the recipe's forward datapath; dW and dX GEMMs use its backward datapath, with the gradient as
+// the B operand. Prints the test-loss
 // curve (10 points) and the final train loss, test loss and accuracy per seed.
 #pragma once
 #include "datapaths.h"
@@ -155,9 +156,13 @@ inline void train(const Recipe &r, unsigned steps, unsigned seeds) {
             Matrix pre, act, dlogits(batch * classes);
             Matrix logits = forward(m, x, batch, r.forward, pre, act);
             train_loss = softmax_loss(logits, train.y, 0, batch, &dlogits, nullptr);
+            // Backward GEMMs take the gradient as B, the operand stochastic-rounding recipes
+            // round stochastically: dX^T = W2 dlogits^T is dX = dlogits W2^T with each dot
+            // product's operands swapped, which every datapath computes identically.
             Matrix dw2 = r.backward(transpose(act, batch, hidden), dlogits, hidden, batch, classes);
-            Matrix dact =
-                r.backward(dlogits, transpose(m.w2, hidden, classes), batch, classes, hidden);
+            Matrix dact = transpose(
+                r.backward(m.w2, transpose(dlogits, batch, classes), hidden, classes, batch),
+                hidden, batch);
             for (unsigned i = 0; i < dact.size(); ++i) dact[i] = pre[i] > 0 ? dact[i] : 0;
             Matrix dw1 = r.backward(transpose(x, batch, in_dim), dact, in_dim, batch, hidden);
             // Linear decay from 0.2 to 0.02 so the final loss is not dominated by SGD noise.
