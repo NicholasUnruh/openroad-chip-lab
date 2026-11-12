@@ -273,7 +273,8 @@ def main() -> int:
             (run / "DONE").write_text("diverged\n")
             return 0
         record(event="train", step=step, loss=loss_sum, lr=lr, grad_norm=norm,
-               tok_per_s=args.batch * args.ctx / dt)  # fmt: skip
+               tok_per_s=args.batch * args.ctx / dt,
+               peak_gb=torch.cuda.max_memory_allocated() / 1e9)  # fmt: skip
         if time.time() - last_ckpt > 60 * args.checkpoint_minutes:
             save(run, step, model, opt)
             last_ckpt = time.time()

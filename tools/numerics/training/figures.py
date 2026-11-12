@@ -2,7 +2,8 @@
 
 usage: uv run --extra cpu python figures.py formats
        uv run --extra cpu python figures.py curves --runs <dir> [--out name]
-       uv run --extra cpu python figures.py throughput --log <file>
+       uv run --extra cpu python figures.py throughput --runs <probe dir>   (logs -> JSON + figure)
+       uv run --extra cpu python figures.py throughput                      (from the JSON)
 """
 
 import argparse
@@ -54,8 +55,7 @@ def formats() -> None:
     for row, (name, e) in enumerate(elements):
         top_value = int(e.max_value * 2.0**-e.grid)
         grid = torch.arange(1, top_value + 1, dtype=torch.float64)
-        values = mx.dequantize(mx.quantize(grid * 2.0**e.grid, mx.Format("g", e, 1)))
-        values = torch.unique(values[values > 0])
+        values = torch.unique(mx.to_grid(grid * 2.0**e.grid, e)).double() * 2.0**e.grid
         top.scatter(values, [row] * len(values), s=10, color=COLOR[name], linewidths=0)
         top.text(e.max_value * 1.4, row, f"{len(values)} positive values", va="center",
                  fontsize=8, color=MUTED)  # fmt: skip
@@ -127,15 +127,60 @@ def curves(runs: Path, out: str) -> None:
     fig.savefig(IMG / f"{out}.png", dpi=150)
 
 
+THROUGHPUT = IMG.parent / "data" / "training-throughput.json"
+
+
+def throughput(runs: Path | None) -> None:
+    """Training tokens/s per format: mean of steps 2-4 of a short probe run of each."""
+    if runs is not None:
+        out = {}
+        for path in sorted(runs.glob("*/log.jsonl")):
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            start = [r for r in rows if r["event"] == "start"][-1]
+            train = [r["tok_per_s"] for r in rows if r["event"] == "train"][1:]
+            key = start["format"] + (
+                "" if start["args"]["micro"] == 4 else f"_micro{start['args']['micro']}"
+            )
+            out[key] = {
+                "tokens_per_s": round(sum(train) / len(train)),
+                "steps_averaged": len(train),
+                "micro_batch": start["args"]["micro"],
+                "batch_tokens": start["args"]["batch"] * start["args"]["ctx"],
+                "peak_gb": round(
+                    max(r.get("peak_gb", 0) for r in rows if r["event"] == "train"), 2
+                ),
+            }
+        THROUGHPUT.write_text(json.dumps(out, indent=1) + "\n")
+    data = json.loads(THROUGHPUT.read_text())
+    names = [n for n in LABEL if n in data]  # the micro-batch-4 runs
+    rate = [data[n]["tokens_per_s"] / 1e3 for n in names]
+    fig, ax = plt.subplots(figsize=(8, 3.4))
+    bars = ax.barh(range(len(names)), rate, color=[COLOR[n] for n in names], height=0.6)
+    for bar, n, r in zip(bars, names, rate):
+        rel = r / rate[names.index("bf16")]
+        ax.text(r + 0.3, bar.get_y() + bar.get_height() / 2, f"{r:.1f}k  ({rel:.2f}x BF16)",
+                va="center", fontsize=8, color=MUTED)  # fmt: skip
+    ax.set_yticks(range(len(names)), [LABEL[n] for n in names], fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel("training tokens per second, GPT-2 124M, one RTX 4060", fontsize=9, color=MUTED)
+    ax.set_xlim(0, max(rate) * 1.35)
+    style(ax)
+    ax.grid(False, axis="y")
+    fig.tight_layout()
+    fig.savefig(IMG / "training-throughput.png", dpi=150)
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("figure", choices=["formats", "curves"])
+    p.add_argument("figure", choices=["formats", "curves", "throughput"])
     p.add_argument("--runs", type=Path)
     p.add_argument("--out", default="training-loss-curves")
     args = p.parse_args()
     IMG.mkdir(parents=True, exist_ok=True)
     if args.figure == "formats":
         formats()
+    elif args.figure == "throughput":
+        throughput(args.runs)
     else:
         curves(args.runs, args.out)
 
