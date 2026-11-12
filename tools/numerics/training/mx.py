@@ -174,22 +174,24 @@ def gemm_reference(a: Quantized, b: Quantized) -> torch.Tensor:
     # 32-term sum needs up to 69 bits; it is not emulated (E4M3 needs 41, FP4 and FP6 at most 23).
     if 2 * (max_grid_bits(fmt.element) + 1) + fmt.block.bit_length() > 53:
         raise ValueError(f"{fmt.name} block sums do not fit 53 bits")
-    qa = a.q.to(torch.int64).reshape(m, blocks, fmt.block).permute(1, 0, 2)
-    qb = b.q.to(torch.int64).reshape(n, blocks, fmt.block).permute(1, 2, 0)
-    exact = torch.bmm(qa, qb)  # int64 [blocks, M, N]
+    # Grid integers in float64: every product and partial block sum is an integer below 2^53,
+    # so a float64 matrix product (CPU or GPU, any summation order) is exact.
+    qa = a.q.to(torch.float64).reshape(m, blocks, fmt.block)
+    qb = b.q.to(torch.float64).reshape(n, blocks, fmt.block)
     grid = 2.0 ** (2 * fmt.element.grid)
     sa, sb = a.scale.to(torch.float64), b.scale.to(torch.float64)
-    acc = torch.zeros(m, n, dtype=torch.float32)
+    acc = torch.zeros(m, n, dtype=torch.float32, device=a.q.device)
     per_unit = 32 // fmt.block
     for i in range(0, blocks, per_unit):
         # Each block term is exact (two short significands times the sum). The NVFP4 pair spans
         # under 48 bits (block sums < 2^12, scales 2^-9..448), so its float64 sum is exact too.
         term = sum(
-            exact[j].to(torch.float64) * (sa[:, j, None] * sb[None, :, j] * grid)
+            (qa[:, j] @ qb[:, j].T) * (sa[:, j, None] * sb[None, :, j] * grid)
             for j in range(i, i + per_unit)
         )
         acc = round_to_odd_add(acc.to(torch.float64), term).to(torch.float32)
     if fmt.nvfp4:
         f32 = torch.float32
-        acc = acc * (torch.tensor(a.tensor_decode, dtype=f32) * torch.tensor(b.tensor_decode, dtype=f32))
+        decode = torch.tensor(a.tensor_decode, dtype=f32) * torch.tensor(b.tensor_decode, dtype=f32)
+        acc = acc * decode.to(acc.device)
     return acc
