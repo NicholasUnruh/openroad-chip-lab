@@ -1,0 +1,8 @@
+[
+  {"format": "BF16", "metric": "area_per_mac_um2", "value": 165, "unit": "um2 (ASAP7)", "source": "docs/numerics-results.md"},
+  {"format": "MXFP8", "metric": "area_per_mac_um2", "value": 86, "unit": "um2 (ASAP7)", "source": "docs/numerics-results.md"},
+  {"format": "MXFP4", "metric": "area_per_mac_um2", "value": 33, "unit": "um2 (ASAP7)", "source": "docs/numerics-results.md"},
+  {"format": "BF16", "metric": "energy_per_mac_pj", "value": 0.968, "unit": "pJ (ASAP7)", "source": "docs/numerics-results.md"},
+  {"format": "MXFP8", "metric": "energy_per_mac_pj", "value": 0.416, "unit": "pJ (ASAP7)", "source": "docs/numerics-results.md"},
+  {"format": "MXFP4", "metric": "energy_per_mac_pj", "value": 0.2, "unit": "pJ (ASAP7)", "source": "docs/numerics-results.md"}
+]
