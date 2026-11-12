@@ -42,4 +42,4 @@ The encoding sweep is not exhaustive arithmetic conformance. Training covers one
 
 Use the [V4 commands](training-v4.md). Local logs: `build/training_v4_{sim,netlist_sim,layout,gds_inspection}.log`, `build/training-v4_{structure,synth}.log`; historical regression logs: `build/training_v4_{v3,v3_netlist,v2,v2_netlist,scalar}_regression.log`. Metrics and source hashes: `build/training_v4_comparison.json`. The shared benchmark prints `mode=gemm8_stream`.
 
-Power and energy are unmeasured. [Fabrication gates](physical-flow.md) remain separate.
+Power on the 32³ streamed GEMM: 54.6 mW at 40 MHz, 187 pJ per MAC, from the routed netlist's simulated activity ([V7 results](v7-results.md#sky130hd-power)). [Fabrication gates](physical-flow.md) remain separate.

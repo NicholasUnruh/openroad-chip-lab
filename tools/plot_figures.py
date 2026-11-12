@@ -315,15 +315,17 @@ MODULE_NAMES = {
     "fp32_accum_fma_pipe": "BF16 FMA lane",
     "training_tile_v6 (own logic)": "tile: operand flops, sequencer, control",
     "fp_dot8_fp32": "8-term dot unit",
+    "training_tile_v7 (own logic)": "tile: operand flops, sequencer, control",
+    "mx_dot32_fp32": "MXFP8 32-term block-dot unit",
     "sky130_sram_1rw1r_128x256_8": "4 KB SRAM macro",
 }
 
 
 def area_breakdown(site):
     areas = json.loads((RENDERS / "module_area.json").read_text())
-    groups = {"training_tile_v4": "V4", "training_tile_v6": "V6"}
+    groups = {"training_tile_v4": "V4", "training_tile_v6": "V6", "training_tile_v7": "V7"}
     colours = [BLUE, AQUA, VIOLET, "#c98500", "#d55181", "#e66767"]
-    fig, ax = plt.subplots(figsize=(16, 4.4))
+    fig, ax = plt.subplots(figsize=(16, 5.6))
     legend = {}
     for row, (top, label) in enumerate(groups.items()):
         left = 0.0
@@ -369,7 +371,7 @@ def area_breakdown(site):
     ax.invert_yaxis()
     ax.grid(axis="y", visible=False)
     ax.set_title(
-        "Where the area goes: V4 lanes vs V6 dot-product units and scratchpad",
+        "Where the area goes: V4 lanes, V6 BF16 dot units, V7 MXFP8 block-dot units",
         loc="left",
     )
     fig.tight_layout()

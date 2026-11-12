@@ -1,0 +1,19 @@
+OpenROAD bazel-nostamp 
+Features included (+) or not (-): -GPU -GUI -Python
+This program is licensed under the BSD-3 license. See the LICENSE file for details.
+Components of this program may be licensed under more restrictive licenses which must be honored.
+Annotated 225065 pin activities.
+vcd         225065
+unannotated  1758
+antenna_pins 1758
+Group                  Internal  Switching    Leakage      Total
+                          Power      Power      Power      Power (Watts)
+----------------------------------------------------------------
+Sequential             2.18e-02   4.19e-04   1.14e-07   2.23e-02  35.0%
+Combinational          1.48e-03   3.81e-03   1.64e-07   5.28e-03   8.3%
+Clock                  1.22e-02   9.55e-03   2.28e-08   2.17e-02  34.2%
+Macro                  1.43e-02   0.00e+00   3.99e-05   1.44e-02  22.6%
+Pad                    0.00e+00   0.00e+00   0.00e+00   0.00e+00   0.0%
+----------------------------------------------------------------
+Total                  4.98e-02   1.38e-02   4.02e-05   6.36e-02 100.0%
+                          78.3%      21.6%       0.1%

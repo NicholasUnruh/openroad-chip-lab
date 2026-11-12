@@ -1,0 +1,20 @@
+OpenROAD bazel-nostamp 
+Features included (+) or not (-): -GPU -GUI -Python
+This program is licensed under the BSD-3 license. See the LICENSE file for details.
+Components of this program may be licensed under more restrictive licenses which must be honored.
+[WARNING ORD-2056] The following 1 liberty cell(s) do not have LEF masters and will be marked as dont-use:
+  sky130_sram_1rw1r_128x256_8
+Annotated 240300 pin activities.
+vcd         240300
+unannotated   538
+Group                  Internal  Switching    Leakage      Total
+                          Power      Power      Power      Power (Watts)
+----------------------------------------------------------------
+Sequential             1.94e-02   9.92e-04   9.27e-08   2.04e-02  37.3%
+Combinational          4.49e-03   1.14e-02   1.47e-07   1.59e-02  29.1%
+Clock                  1.06e-02   7.73e-03   1.94e-08   1.83e-02  33.6%
+Macro                  0.00e+00   0.00e+00   0.00e+00   0.00e+00   0.0%
+Pad                    0.00e+00   0.00e+00   0.00e+00   0.00e+00   0.0%
+----------------------------------------------------------------
+Total                  3.44e-02   2.02e-02   2.59e-07   5.46e-02 100.0%
+                          63.1%      36.9%       0.0%
