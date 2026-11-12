@@ -6,6 +6,8 @@ Method: [numerics-study.md](numerics-study.md). Verified 2026-11-12 (15 routed p
 
 Among datapaths that train within the tolerance, **MXFP6 E2M3 32-term block dot products** give the most throughput per mm² (4.0× the BF16 dot8) and per joule (3.4×), and train at +0.64% test loss. **MXFP8 (E4M3)** is next at 1.9× and 2.3×, with more accuracy margin (+0.37%). Per-tensor FP8 dot8 units follow at about 1.4–1.5×. **MXFP4 is 5.7× denser but fails training** (+8.9%). NVFP4 fails too, even with stochastic rounding (+5.6%). MXFP6 E3M2 costs the same as E2M3 but fails (+2.1%): with a block scale, the extra mantissa bit matters more than exponent range. For BF16, the frame width is a free knob: narrowing the alignment frame from 32 to 24 bits saves 11% area and 6% energy, with no measurable change in error or training. Chained FMAs cost 3.3× the dot8's energy per MAC and give 0.32× its throughput per mm².
 
+**Checked in a real PDK.** BF16 dot8, MXFP8 and MXFP6 E2M3 units routed in SKY130HD keep this order, and their area and energy ratios agree with ASAP7 within 11%. In a full tile, though, MXFP8 saves only 1.2–1.6× energy per MAC over BF16, because flops and the clock tree dominate tile power ([V7 results](v7-results.md#asap7-prediction-vs-sky130hd-measurement)).
+
 ## Ranking
 
 Throughput per mm² uses the routed fmax; energy uses simulated activity at 1 GHz. Rank among the points that pass the training gate.
@@ -124,6 +126,7 @@ Loss curves (10 points per run) are in `results/numerics/train_*.txt`; `tools/pl
 ```sh
 make sim-dot8 sim-mx sim-int8-dot8   # unit correctness, all formats and frames
 make ppa-all                          # 15 routes, then power (about 1 h at ORFS_JOBS=6)
+make ppa-sky130                       # BF16, MXFP8 and E2M3 units in SKY130HD, with power
 make numerics                         # GEMM error and training emulation (about 20 min)
 python3 tools/numerics/report.py      # every table above
 ```

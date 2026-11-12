@@ -1,0 +1,19 @@
+OpenROAD bazel-nostamp 
+Features included (+) or not (-): -GPU -GUI -Python
+This program is licensed under the BSD-3 license. See the LICENSE file for details.
+Components of this program may be licensed under more restrictive licenses which must be honored.
+[WARNING STA-1452] clock clk vcd period 1.000 differs from SDC clock period 10.000
+Annotated 34703 pin activities.
+vcd         34703
+unannotated     4
+Group                  Internal  Switching    Leakage      Total
+                          Power      Power      Power      Power (Watts)
+----------------------------------------------------------------
+Sequential             1.68e-02   1.38e-02   1.06e-08   3.07e-02  27.3%
+Combinational          3.59e-02   3.99e-02   3.40e-08   7.58e-02  67.5%
+Clock                  3.45e-03   2.32e-03   2.59e-09   5.77e-03   5.1%
+Macro                  0.00e+00   0.00e+00   0.00e+00   0.00e+00   0.0%
+Pad                    0.00e+00   0.00e+00   0.00e+00   0.00e+00   0.0%
+----------------------------------------------------------------
+Total                  5.62e-02   5.60e-02   4.71e-08   1.12e-01 100.0%
+                          50.1%      49.9%       0.0%

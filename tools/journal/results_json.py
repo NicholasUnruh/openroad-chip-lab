@@ -1,5 +1,6 @@
-"""Write docs/journal/results.json: per-format area and energy per MAC (ASAP7, routed) and the
-training loss penalty against FP32, from the same data as tools/numerics/report.py.
+"""Write docs/journal/results.json: per-format area and energy per MAC (ASAP7, routed; SKY130HD
+for the units routed there), the training loss penalty against FP32, and the SKY130HD tile energy
+per MAC, from the same data as tools/numerics/report.py and tools/tile_power.sh.
 
 usage: python3 tools/journal/results_json.py
 """
@@ -28,6 +29,14 @@ FORMATS = [
     ("NVFP4", "ppa_dot32_nvfp4", 32, "nvfp4"),
     ("NVFP4-SR", None, 32, "nvfp4_sr"),
 ]
+SKY130_SOURCE = "docs/v7-results.md"
+# Format, tile benchmark directory under results/sky130/tile-power/ (tools/tile_power.sh).
+TILES = [
+    ("BF16", "gemm32", "training_tile_v6-gemm32"),
+    ("BF16", "pipelined", "training_tile_v6-gemm16_pipelined"),
+    ("MXFP8", "gemm32", "training_tile_v7-gemm32"),
+    ("MXFP8", "pipelined", "training_tile_v7-gemm16x32_pipelined"),
+]
 # A run counts as diverged, with no penalty value, when its mean final test loss exceeds this
 # multiple of FP32's (the worst converging recipe is 1.17x).
 DIVERGED = 2.0
@@ -47,6 +56,12 @@ def main(argv):
                          "value": round(p["area_per_mac"], 1), "unit": "um2 (ASAP7)", "source": SOURCE})
             rows.append({"format": name, "metric": "energy_per_mac_pj",
                          "value": round(p["fj_per_mac"] / 1e3, 3), "unit": "pJ (ASAP7)", "source": SOURCE})
+        if harness in report.SKY130_POINTS:
+            p = report.ppa(harness, macs, "build/ppa-sky130hd")
+            rows.append({"format": name, "metric": "sky130_area_per_mac_um2",
+                         "value": round(p["area_per_mac"]), "unit": "um2 (SKY130HD)", "source": SKY130_SOURCE})
+            rows.append({"format": name, "metric": "sky130_energy_per_mac_pj",
+                         "value": round(p["fj_per_mac"] / 1e3, 2), "unit": "pJ (SKY130HD)", "source": SKY130_SOURCE})
         loss = train[recipe][0]
         row = {"format": name, "metric": "loss_penalty_pct", "value": None,
                "unit": "% test loss vs FP32", "source": SOURCE}
@@ -55,6 +70,12 @@ def main(argv):
         else:
             row["note"] = f"diverged (mean test loss {loss:.2f} vs FP32 {fp32:.4f})"
         rows.append(row)
+    for name, bench, directory in TILES:
+        summary = (report.ROOT / "results/sky130/tile-power" / directory / "summary.txt").read_text()
+        fields = dict(f.split("=") for f in summary.split())
+        rows.append({"format": name, "metric": f"tile_{bench}_energy_per_mac_pj",
+                     "value": round(float(fields["energy_per_mac_pj"]), 1),
+                     "unit": "pJ (SKY130HD tile, 40 MHz)", "source": SKY130_SOURCE})
     OUT.write_text("[\n" + ",\n".join("  " + json.dumps(r, ensure_ascii=False) for r in rows) + "\n]\n")
     print(f"wrote {len(rows)} rows to {OUT.relative_to(report.ROOT)}")
     return 0

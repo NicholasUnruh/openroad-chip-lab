@@ -41,4 +41,4 @@ The datapath is much denser, but V6's SRAM macro, at about 176 µm² per byte, c
 | Mutation checks | Unit 9/9; sequencer caught, plus a 32³ throughput bound |
 | Power grid | `check_power_grid`: VDD and VSS fully connected after 1.6 µm strap fix |
 
-Power is unmeasured: the default-activity estimate moved from 0.64 W to 0.07 W between the two routes, which says more about the estimate than the design. Local logs: `build/training_v6_{layout,netlist_sim}.log`; metrics in `build/layout-training-v6/`. [Fabrication gates](physical-flow.md) remain separate.
+Power from the routed netlist's simulated activity: 64.9 mW at 40 MHz on the 32³ GEMM, 108 pJ per MAC (84 pJ without the SRAM macro), compared with V4 and V7 in [V7 results](v7-results.md#sky130hd-power). The default-activity estimate had moved from 0.64 W to 0.07 W between two routes, which said more about the estimate than the design. Local logs: `build/training_v6_{layout,netlist_sim}.log`; metrics in `build/layout-training-v6/`. [Fabrication gates](physical-flow.md) remain separate.
