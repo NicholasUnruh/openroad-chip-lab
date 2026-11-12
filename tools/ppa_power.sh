@@ -1,25 +1,29 @@
 #!/bin/sh
-# Routed ASAP7 power for a PPA harness from simulated switching activity.
+# Routed power for a PPA harness from simulated switching activity (PPA_PDK=asap7 or sky130hd).
 # Simulates the routed netlist (zero-delay Liberty cell models) and the Yosys netlist on the same
 # realistic stimulus from tools/ppa_activity.py, requires identical outputs after warm-up, then
 # annotates the routed design with the VCD and runs OpenSTA report_power with extracted parasitics.
-# Writes build/ppa/<harness>/power.txt.
+# Writes build/ppa/<harness>/power.txt (build/ppa-sky130hd/ for SKY130). The stimulus clock is
+# 1 GHz for both PDKs: switching energy per clock does not depend on the rate, leakage does.
 # usage: tools/ppa_power.sh <harness>
 set -eu
 [ "$#" -eq 1 ] || { printf 'usage: tools/ppa_power.sh <harness>\n'; exit 2; }
 design=$1
 lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tool_dir=${ORFS_TOOL_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/openroad-chip-lab/bazel-orfs}
-results="$tool_dir/bazel-bin/chip-lab/results/asap7/$design/base"
-platform=$(ls -d "$HOME"/.cache/bazel/_bazel_*/*/external/+orfs_repositories+orfs/flow/platforms/asap7 2>/dev/null | head -1)
+pdk=${PPA_PDK:-asap7}
+results="$tool_dir/bazel-bin/chip-lab/results/$pdk/$design/base"
+platform=$(ls -d "$HOME"/.cache/bazel/_bazel_*/*/external/+orfs_repositories+orfs/flow/platforms/$pdk 2>/dev/null | head -1)
 openroad=$(find -H "$tool_dir/bazel-out" -path '*openroad+/openroad' -type f | head -1)
 [ -s "$results/6_final.odb" ] || { printf 'error: no routed %s\nhelp: run make ppa PPA_TOP=%s\n' "$design" "$design"; exit 1; }
 out_dir="$lab_dir/build/ppa/$design"
+[ "$pdk" = asap7 ] || out_dir="$lab_dir/build/ppa-$pdk/$design"
 mkdir -p "$out_dir/reference"
 lib=$platform/lib/NLDM
 libs="$lib/asap7sc7p5t_AO_RVT_FF_nldm_211120.lib.gz $lib/asap7sc7p5t_INVBUF_RVT_FF_nldm_220122.lib.gz
       $lib/asap7sc7p5t_OA_RVT_FF_nldm_211120.lib.gz $lib/asap7sc7p5t_SIMPLE_RVT_FF_nldm_211120.lib.gz
       $lib/asap7sc7p5t_SEQ_RVT_FF_nldm_220123.lib"
+[ "$pdk" = asap7 ] || libs=$platform/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
 # shellcheck disable=SC2086
 python3 "$lab_dir/tools/liberty_cells.py" "$out_dir/cells.v" $libs
 python3 "$lab_dir/tools/ppa_activity.py" "$design" "$out_dir"

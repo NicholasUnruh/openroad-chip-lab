@@ -102,7 +102,7 @@ train-training-v7:
 
 # ASAP7 PPA harnesses: flatten with Yosys, then run ORFS to route (bin/ppa).
 # ppa_dot8_bf16_f<N> is the BF16 dot8 harness with a FRAME of N bits.
-.PHONY: ppa ppa-netlist ppa-all
+.PHONY: ppa ppa-netlist ppa-all ppa-sky130
 PPA_TOP ?= ppa_dot8_bf16
 PPA_FRAME = $(patsubst ppa_dot8_bf16_f%,%,$(filter ppa_dot8_bf16_f%,$(PPA_TOP)))
 PPA_MODULE = $(if $(PPA_FRAME),ppa_dot8_bf16,$(PPA_TOP))
@@ -120,6 +120,12 @@ ppa-all:
 	for top in $(PPA_HARNESSES); do $(MAKE) ppa-netlist PPA_TOP=$$top || exit 1; done
 	./bin/ppa $(PPA_HARNESSES)
 	for top in $(PPA_HARNESSES); do tools/ppa_power.sh $$top || exit 1; done
+# BF16, MXFP8 and the low-bit winner routed again in SKY130HD (build/ppa-sky130hd/).
+PPA_SKY130 = ppa_dot8_bf16 ppa_dot32_mxfp8 ppa_dot32_mxfp6_e2m3
+ppa-sky130:
+	for top in $(PPA_SKY130); do $(MAKE) ppa-netlist PPA_TOP=$$top || exit 1; done
+	PPA_PDK=sky130hd ./bin/ppa $(PPA_SKY130)
+	for top in $(PPA_SKY130); do PPA_PDK=sky130hd tools/ppa_power.sh $$top || exit 1; done
 
 .PHONY: sim-dot8 sim-dot8-format sim-int8-dot8 sim-mx sim-mx-elem lint-mx formal-mx
 # Dot-product unit in each input format: 0 = BF16, 1 = OCP FP8 E4M3, 2 = OCP FP8 E5M2;
