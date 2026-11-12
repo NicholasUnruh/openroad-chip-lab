@@ -13,8 +13,11 @@ block scales to the FP32 accumulator with one rounding to nearest even:
 - one or two pieces: the block sum is below 2^24, so it is exact in FP32, scaling by the block
   scales is exact, and a single FP32 add rounds once;
 - three pieces (E4M3, up to 2^41): integer carries split the sum exactly into hi * 2^18 + lo,
-  both exact in FP32, and acc + hi + lo is rounded once with the Boldo-Melquiond three-term algorithm (two TwoSums, an
-  addition rounded to odd, a final rounded addition).
+  both exact in FP32, and acc + hi + lo is rounded once with the Boldo-Melquiond three-term
+  algorithm (two TwoSums, an addition rounded to odd, a final rounded addition);
+- NVFP4: the unit takes 32 elements, two 16-element blocks with their own E4M3 scales. Each
+  block's sum times its scale product is exact in FP32 (under 2^20), and acc + t0 + t1 is
+  rounded once with the same three-term algorithm.
 """
 
 import os
@@ -101,16 +104,21 @@ def _block_sum(
 
 
 @triton.jit
+def _sum3(acc, b, c):
+    """acc + b + c rounded once to FP32 (Boldo-Melquiond); b and c are exact FP32 values."""
+    uh, ul = _two_sum(b, c)
+    th, tl_ = _two_sum(acc, uh)
+    return th + _round_to_odd_add(tl_, ul)
+
+
+@triton.jit
 def _accumulate(acc, hi, lo, fa, fb, PIECES: tl.constexpr):
     """acc + S * fa * fb rounded once to FP32; the products by the scales are exact."""
     if PIECES < 3:
         return acc + hi.to(tl.float32) * fa[:, None] * fb[None, :]
     else:
         b = hi.to(tl.float32) * 262144.0 * fa[:, None] * fb[None, :]
-        c = lo.to(tl.float32) * fa[:, None] * fb[None, :]
-        uh, ul = _two_sum(b, c)
-        th, tl_ = _two_sum(acc, uh)
-        return th + _round_to_odd_add(tl_, ul)
+        return _sum3(acc, b, lo.to(tl.float32) * fa[:, None] * fb[None, :])
 
 
 @triton.autotune(
@@ -156,14 +164,15 @@ def _gemm_kernel(
             fa = tl.load(fa_ptr + rm * blocks + k0 // 32, mask=rm < M, other=0.0)
             fb = tl.load(fb_ptr + rn * blocks + k0 // 32, mask=rn < N, other=0.0)
             acc = _accumulate(acc, hi, lo, fa, fb, PIECES)
-        else:  # two 16-element blocks per slice, in K order
-            for half in tl.static_range(2):
-                hi, lo = _block_sum(
-                    a_ptrs, b_ptrs, a_piece, b_piece, mask_a, mask_b, half, PIECES, True
-                )
-                fa = tl.load(fa_ptr + rm * blocks + k0 // 16 + half, mask=rm < M, other=0.0)
-                fb = tl.load(fb_ptr + rn * blocks + k0 // 16 + half, mask=rn < N, other=0.0)
-                acc = _accumulate(acc, hi, lo, fa, fb, PIECES)
+        else:  # NVFP4: two 16-element blocks per unit call, one rounding for both
+            s0, _ = _block_sum(a_ptrs, b_ptrs, a_piece, b_piece, mask_a, mask_b, 0, PIECES, True)
+            s1, _ = _block_sum(a_ptrs, b_ptrs, a_piece, b_piece, mask_a, mask_b, 1, PIECES, True)
+            fa0 = tl.load(fa_ptr + rm * blocks + k0 // 16, mask=rm < M, other=0.0)
+            fb0 = tl.load(fb_ptr + rn * blocks + k0 // 16, mask=rn < N, other=0.0)
+            fa1 = tl.load(fa_ptr + rm * blocks + k0 // 16 + 1, mask=rm < M, other=0.0)
+            fb1 = tl.load(fb_ptr + rn * blocks + k0 // 16 + 1, mask=rn < N, other=0.0)
+            t0 = s0.to(tl.float32) * fa0[:, None] * fb0[None, :]
+            acc = _sum3(acc, t0, s1.to(tl.float32) * fa1[:, None] * fb1[None, :])
     c_ptrs = c_ptr + rm[:, None].to(tl.int64) * N + rn[None, :]
     tl.store(c_ptrs, acc, mask=mask_a & mask_b)
 
@@ -236,8 +245,9 @@ def _quantize_kernel(
         encode = tl.load(encode_ptr)
         code = _to_grid(tl.math.div_rn(amax, 6.0) * encode, 4, 3, 448.0)
         scale = code.to(tl.float32) * 0.001953125  # E4M3 grid 2^-9
-        safe = tl.where(scale > 0, scale, 1.0)
-        y = tl.math.div_rn(x * encode, safe[:, None])
+        s_dec = tl.math.div_rn(1.0, encode)
+        inverse = tl.math.div_rn(1.0, tl.where(scale > 0, scale, 1.0) * s_dec)
+        y = x * inverse[:, None]
         q = tl.where((scale > 0)[:, None], _to_grid(y, EXP_BITS, MAN_BITS, MAX_VALUE), 0)
         factor = scale * (2.0**GRID)
     else:
@@ -259,7 +269,7 @@ def _quantize_kernel(
 @dataclass
 class Packed:
     """A quantized operand in the kernel's layout: int8 pieces [P, R, K], FP32 block factors
-    [R, K / block] (scale * 2^grid), and the NVFP4 tensor decode factor as a float64 tensor."""
+    [R, K / block] (scale * 2^grid), and the NVFP4 tensor decode factor s_dec (FP32 tensor)."""
 
     pieces: torch.Tensor
     factor: torch.Tensor
@@ -281,7 +291,7 @@ def pack(x: torch.Tensor, fmt: mx.Format) -> Packed:
         amax = x.abs().max().float()
         amax = torch.where(amax > 0, amax, 1.0)
         encode = torch.tensor(mx.NVFP4_RANGE, dtype=torch.float32, device=x.device) / amax
-        decode = amax.to(torch.float64) / mx.NVFP4_RANGE
+        decode = 1.0 / encode
     br = 64
     grid = (triton.cdiv(r, br), k // fmt.block)
     _quantize_kernel[grid](
@@ -313,20 +323,28 @@ def unpack(p: Packed) -> torch.Tensor:
     return q
 
 
-# Count of GEMMs whose block scales left the exact FP32 range; the trainer checks it each step.
-range_errors = None
+# GEMMs computed by the float64 fallback because their block scales left the exact FP32 range.
+exact_fallbacks = 0
 
 
 def gemm_packed(a: Packed, b: Packed) -> torch.Tensor:
-    """C = A B^T for packed A [M, K], B [N, K]; matches mx.gemm_reference bit for bit."""
-    global range_errors
+    """C = A B^T for packed A [M, K], B [N, K]; matches mx.gemm_reference bit for bit.
+
+    The kernel's FP32 products by the block factors are exact while the smallest product LSB,
+    factor_a * factor_b, is at least 2^-149 (NVFP4 factors are at least 2^-10, so always). Very
+    small MX blocks (e.g. near-zero gradient blocks) can break that; such GEMMs run through
+    mx.gemm_reference in float64 on the GPU instead, which is exact at any scale.
+    """
+    global exact_fallbacks
     fmt = a.fmt
     _, m, k = a.pieces.shape
     n = b.pieces.shape[1]
     assert k % 32 == 0, "K must be a multiple of 32"
-    if not fmt.nvfp4:  # MX: the smallest result LSB, factor_a * factor_b, must be >= 2^-149
-        bad = (a.factor.min() * b.factor.min() < 2.0**-149).to(torch.int32)
-        range_errors = bad if range_errors is None else range_errors + bad
+    if not fmt.nvfp4 and a.factor.min().double() * b.factor.min().double() < 2.0**-149:
+        exact_fallbacks += 1
+        grid = 2.0**-fmt.element.grid
+        qa = mx.Quantized(unpack(a), a.factor * grid, 1.0, fmt)
+        return mx.gemm_reference(qa, mx.Quantized(unpack(b), b.factor * grid, 1.0, fmt))
     c = torch.empty(m, n, dtype=torch.float32, device=a.pieces.device)
     grid = lambda meta: (triton.cdiv(m, meta["BM"]), triton.cdiv(n, meta["BN"]))  # noqa: E731
     _gemm_kernel[grid](
@@ -344,7 +362,7 @@ def gemm_packed(a: Packed, b: Packed) -> torch.Tensor:
         PIECES=a.pieces.shape[0],
     )
     if fmt.nvfp4:
-        c *= (a.decode * b.decode).to(torch.float32)
+        c *= a.decode * b.decode
     return c
 
 

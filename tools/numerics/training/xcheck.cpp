@@ -5,9 +5,10 @@
 // stdout: double dequantized A[M*K], B[N*K]; float C[M*N]
 // Formats: 0 MXFP8 E4M3, 1 MXFP8 E5M2, 2 MXFP6 E3M2, 3 MXFP6 E2M3, 4 MXFP4 E2M1, 5 NVFP4.
 //
-// MXFP8 E4M3 and MXFP4 GEMMs come from mx_chain (quantizer plus mx_dot32, the study's own
-// reference). The other formats use the same exact-sum oracle (dot8::exact_round) with the same
-// quantization rule; for E4M3 and E2M1 that generic path is also checked against mx_chain here.
+// Every GEMM output is computed twice and required to agree: by the study's references (mx_chain:
+// mx_quantize plus mx_dot32; nvfp4_chain: nvfp4_quantize plus nvfp4_dot32 and the host-side
+// tensor decode) and by a generic exact-sum oracle (dot8::exact_round, one rounding per 32
+// elements). E5M2 has no study chain here and uses the oracle alone.
 #include "../datapaths.h"
 #include <cstdio>
 #include <stdexcept>
@@ -37,36 +38,31 @@ static Element decode(uint8_t code, int exp_bits, int man_bits) {
 struct Row {
     std::vector<Element> e;
     std::vector<Element> scale;
-    double tensor_decode = 1;
 };
 
-// NVFP4 (arXiv 2509.25149, Appendix B) in float arithmetic: encode = 2688 / amax_tensor, block
-// scale = E4M3(amax_block / 6 * encode), element = E2M1(x * encode / block scale).
+// MX rows follow the OCP shared-exponent rule; NVFP4 rows come from the study's nvfp4_quantize.
 static Row quantize(const float *x, int k, const Spec &s, double tensor_amax) {
     Row r;
-    float encode = 2688.0f / float(tensor_amax);
-    if (s.nvfp4) r.tensor_decode = tensor_amax / (6.0 * 448.0);
+    if (s.nvfp4) {
+        float s_enc = nvfp4_encode_scale(tensor_amax);
+        for (int b = 0; b < k; b += 16) {
+            double block[16];
+            for (int i = 0; i < 16; ++i) block[i] = x[b + i];
+            std::array<uint8_t, 16> codes;
+            r.scale.push_back(decode(nvfp4_quantize(block, s_enc, codes), 4, 3));
+            for (uint8_t c : codes) r.e.push_back(decode(c, 2, 1));
+        }
+        return r;
+    }
     for (int b = 0; b < k; b += s.block) {
         float m = 0;
         for (int i = 0; i < s.block; ++i) m = std::max(m, std::fabs(x[b + i]));
-        Element scale;
-        float divide;  // the element is to_small(x * pre / divide)
-        float pre = 1;
-        if (s.nvfp4) {
-            scale = decode(to_small(double(m / 6.0f * encode), 4, 3, 448.0), 4, 3);
-            pre = encode;
-            divide = std::ldexp(float(scale.sig), scale.lsb);
-        } else {
-            int shared = m > 0 ? int(std::floor(std::log2(m))) - s.emax : -127;
-            shared = std::clamp(shared, -127, 127);
-            scale = {false, 1, shared};
-            divide = std::ldexp(1.0f, shared);
-        }
-        r.scale.push_back(scale);
+        int shared = m > 0 ? int(std::floor(std::log2(m))) - s.emax : -127;
+        shared = std::clamp(shared, -127, 127);
+        r.scale.push_back({false, 1, shared});
+        float divide = std::ldexp(1.0f, shared);
         for (int i = 0; i < s.block; ++i) {
-            uint8_t code = divide == 0 ? 0
-                                       : to_small(double(x[b + i] * pre / divide), s.exp_bits,
-                                                  s.man_bits, s.max_value);
+            uint8_t code = to_small(double(x[b + i] / divide), s.exp_bits, s.man_bits, s.max_value);
             r.e.push_back(decode(code, s.exp_bits, s.man_bits));
         }
     }
@@ -79,14 +75,14 @@ static double value(const Row &r, int i, int block) {
     return e.sign ? -v : v;
 }
 
-// Chained exact block dot products, one FP32 rounding per block, from +0.
+// Chained exact dot products, one FP32 rounding per 32 elements, from +0.
 static float oracle(const Row &a, const Row &b, int k, int block) {
     uint32_t acc = 0;
-    for (int b0 = 0; b0 < k; b0 += block) {
+    for (int b0 = 0; b0 < k; b0 += 32) {  // one unit call (one or two scale blocks) per 32
         std::vector<dot8::Term> t;
-        const Element &sa = a.scale[b0 / block], &sb = b.scale[b0 / block];
-        for (int i = b0; i < b0 + block; ++i) {
+        for (int i = b0; i < b0 + 32; ++i) {
             const Element &x = a.e[i], &y = b.e[i];
+            const Element &sa = a.scale[i / block], &sb = b.scale[i / block];
             t.push_back({x.sign != y.sign, x.sig * y.sig * sa.sig * sb.sig,
                          x.lsb + y.lsb + sa.lsb + sb.lsb, 0});
         }
@@ -120,17 +116,19 @@ int main() {
                 double v = value(r, i, s.block);
                 std::fwrite(&v, 8, 1, stdout);
             }
-    float decode = float(ra[0].tensor_decode * rb[0].tensor_decode);
+    constexpr MxElement element[] = {MxElement::e4m3, MxElement::e5m2, MxElement::e3m2,
+                                     MxElement::e2m3, MxElement::e2m1};
+    float decode = (1.0f / nvfp4_encode_scale(amax_a)) * (1.0f / nvfp4_encode_scale(amax_b));
     for (int i = 0; i < m; ++i)
         for (int j = 0; j < n; ++j) {
             float c = oracle(ra[i], rb[j], k, s.block);
-            if (f == 0 || f == 4) {
+            if (s.nvfp4) c = c * decode;
+            if (f != 1) {
                 Vec x(a.begin() + size_t(i) * k, a.begin() + size_t(i + 1) * k);
                 Vec y(b.begin() + size_t(j) * k, b.begin() + size_t(j + 1) * k);
-                float study = mx_chain(x, y, f == 0 ? MxElement::e4m3 : MxElement::e2m1);
-                if (bits(study) != bits(c)) throw std::runtime_error("oracle != mx_chain");
+                float study = s.nvfp4 ? nvfp4_chain(x, y, amax_a, amax_b) : mx_chain(x, y, element[f]);
+                if (bits(study) != bits(c)) throw std::runtime_error("oracle != study chain");
             }
-            if (s.nvfp4) c = c * decode;
             std::fwrite(&c, 4, 1, stdout);
         }
     return 0;

@@ -45,6 +45,8 @@ def sample(kind: str, shape: tuple[int, int], g: torch.Generator) -> torch.Tenso
         x = torch.randint(-64, 65, shape, generator=g).to(torch.float64) / 8
     elif kind == "sparse":  # whole zero blocks and isolated values
         x[torch.rand(shape, generator=g) < 0.9] = 0
+    elif kind == "tiny":  # rows over 2^-100 .. 2^-40: scale products below 2^-149, subnormal C
+        x *= torch.exp2(torch.randint(-100, -39, (shape[0], 1), generator=g).to(torch.float64))
     return x.to(torch.float32)
 
 
@@ -74,7 +76,7 @@ def main() -> int:
     args = parser.parse_args()
     build()
     g = torch.Generator().manual_seed(2026)
-    kinds = ["gaussian", "laplace", "outliers", "rows", "wide", "ties", "sparse"]
+    kinds = ["gaussian", "laplace", "outliers", "rows", "wide", "ties", "sparse", "tiny"]
     failures = 0
     for fmt_id, name in enumerate(FORMAT_IDS):
         fmt = mx.FORMATS[name]

@@ -1,0 +1,8 @@
+# uv run --extra cuda python xcheck.py --cases 10 --kernel  (RTX 4060; adds the 'tiny' distribution, rows over 2^-100..2^-40, which drives block-factor products below 2^-149 and exercises the float64 fallback)
+mxfp8           589344 elements    53900 outputs checked
+mxfp8_e5m2      688704 elements        0 outputs checked
+mxfp6_e3m2      503584 elements    41545 outputs checked
+mxfp6_e2m3      531520 elements    45956 outputs checked
+mxfp4           553280 elements    50398 outputs checked
+nvfp4           509536 elements    36488 outputs checked
+PASS

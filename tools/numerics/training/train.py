@@ -3,7 +3,7 @@
 Emulation scope: each Linear inside the transformer blocks (attention QKV and output projection,
 MLP up and down projection) runs its forward, input-gradient and weight-gradient GEMMs through
 kernel.gemm: block-scaled quantization along the GEMM's reduction axis, exact block dot products,
-one FP32 rounding per block. The attention score and value products, embeddings, layer norms and
+one FP32 rounding per 32 elements. The attention score and value products, embeddings, layer norms and
 the tied LM head run in BF16 autocast, as in the BF16 baseline (the NVFP4 pretraining recipe,
 arXiv 2509.25149, also keeps the embeddings and output head in higher precision).
 
@@ -33,13 +33,11 @@ import mx
 PAUSED = 75
 FORMATS = {"bf16": None, **mx.FORMATS}
 
-# Processes that are always on the GPU for the Windows desktop; anything else means someone is
-# using the machine and the run yields.
+# Processes that sit on the GPU for the Windows desktop: every program under C:\Windows\ (shell
+# hosts come and go) plus these. Anything else means someone is using the machine; the run yields.
 DESKTOP = (
-    "dwm.exe", "explorer.exe", "ShellHost.exe", "SearchHost.exe", "StartMenuExperienceHost.exe",
-    "TextInputHost.exe", "LockApp.exe", "ApplicationFrameHost.exe", "SystemSettings.exe",
-    "CrossDeviceResume.exe", "msedgewebview2.exe", "NVIDIA Overlay.exe", "PhoneExperienceHost.exe",
-    "copilotapp.exe", "copilotapphost.exe", "[Insufficient Permissions]", "[Not Found]",
+    "msedgewebview2.exe", "NVIDIA Overlay.exe", "PhoneExperienceHost.exe", "copilotapp.exe",
+    "copilotapphost.exe", "[Insufficient Permissions]", "[Not Found]",
 )  # fmt: skip
 
 
@@ -52,8 +50,9 @@ def foreign_gpu_process() -> str | None:
     except (OSError, subprocess.TimeoutExpired):
         return None  # not on the shared Windows machine
     for line in out.splitlines():
-        name = line.strip().replace("\\", "/").rsplit("/", 1)[-1]
-        if name and name not in DESKTOP:
+        path = line.strip().replace("\\", "/")
+        name = path.rsplit("/", 1)[-1]
+        if name and name not in DESKTOP and not path.lower().startswith("c:/windows/"):
             return name
     return None
 
@@ -254,6 +253,7 @@ def main() -> int:
         for group in opt.param_groups:
             group["lr"] = lr
         loss_sum = 0.0
+        kernel.exact_fallbacks = 0
         for micro in range(accum):
             x, y = train.get((step * accum + micro) * args.micro, args.micro)
             with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -264,16 +264,13 @@ def main() -> int:
         opt.step()
         opt.zero_grad(set_to_none=True)
         step += 1
-        if kernel.range_errors is not None and int(kernel.range_errors):
-            record(event="range_error", step=step)
-            raise RuntimeError("block scales left the exact FP32 range")
         dt = time.time() - t0
         if not math.isfinite(loss_sum):
             record(event="diverged", step=step, loss=loss_sum)
             (run / "DONE").write_text("diverged\n")
             return 0
         record(event="train", step=step, loss=loss_sum, lr=lr, grad_norm=norm,
-               tok_per_s=args.batch * args.ctx / dt,
+               tok_per_s=args.batch * args.ctx / dt, exact_fallbacks=kernel.exact_fallbacks,
                peak_gb=torch.cuda.max_memory_allocated() / 1e9)  # fmt: skip
         if time.time() - last_ckpt > 60 * args.checkpoint_minutes:
             save(run, step, model, opt)

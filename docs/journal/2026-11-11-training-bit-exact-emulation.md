@@ -68,7 +68,7 @@ PASS
 
 ## Result
 
-The PyTorch quantizers and reference GEMM match the C++ references exactly. That is 11.3M quantized elements and 767k GEMM outputs over 1,680 random cases, with zero bit differences, for MXFP8, MXFP6 (E3M2 and E2M3), MXFP4 and NVFP4. E5M2 is matched at the quantizer only. The NVFP4 dot unit and the stochastic-rounding quantizers are not yet in the C++ references: the NVFP4 check runs against the same exact-sum oracle with the provisional unit definition (16-term exact sum, exact E4M3 × E4M3 scale product, one FP32 rounding per block, tensor scale applied once at the output). It will be re-run when the unit lands.
+The PyTorch quantizers and reference GEMM match the C++ references exactly. That is 11.3M quantized elements and 767k GEMM outputs over 1,680 random cases, with zero bit differences, for MXFP8, MXFP6 (E3M2 and E2M3), MXFP4 and NVFP4. E5M2 is matched at the quantizer only. The NVFP4 dot unit and the stochastic-rounding quantizers are not yet in the C++ references: the NVFP4 check runs against the same exact-sum oracle with the provisional unit definition (16-term exact sum, exact E4M3 × E4M3 scale product, one FP32 rounding per block, tensor scale applied once at the output). It will be re-run when the unit lands. (Update: the unit rounds once per 32 elements, and the emulator now matches it; see `2026-11-12-training-nvfp4-unit.md`.)
 
 ## Next
 
