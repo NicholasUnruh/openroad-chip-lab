@@ -43,14 +43,42 @@ Training throughput per format (`train.py --max-steps 4 --micro 4`, mean of step
 GEMM microbenchmark at GPT-2 shapes, T = 8,192 tokens (`bench.py`; `docs/journal/data/training-bench.txt`):
 
 ```
-BENCH_PLACEHOLDER
+format       gemm       quant ms   gemm ms  TFLOP/s
+bf16         qkv            0.00      0.99    29.41
+fp32         qkv            0.00      3.29     8.81
+mxfp8        qkv            0.25      6.50     4.29
+mxfp6_e3m2   qkv            0.22      1.52    16.69
+mxfp6_e2m3   qkv            0.19      1.10    22.49
+mxfp4        qkv            0.18      1.10    22.77
+nvfp4        qkv            0.84      1.90    10.57
+bf16         proj           0.00      0.32    30.48
+fp32         proj           0.00      1.12     8.65
+mxfp8        proj           0.21      1.78     4.84
+mxfp6_e3m2   proj           0.19      0.63    11.87
+mxfp6_e2m3   proj           0.16      0.45    15.79
+mxfp4        proj           0.15      0.45    16.05
+nvfp4        proj           0.79      0.65     6.72
+bf16         fc             0.00      1.34    28.86
+fp32         fc             0.00      4.82     8.02
+mxfp8        fc             0.27      8.17     4.58
+mxfp6_e3m2   fc             0.24      2.23    15.71
+mxfp6_e2m3   fc             0.20      1.56    21.96
+mxfp4        fc             0.19      1.51    22.72
+nvfp4        fc             0.86      2.53    11.39
+bf16         mlp_proj       0.00      1.21    32.06
+fp32         mlp_proj       0.00      4.60     8.40
+mxfp8        mlp_proj       0.86      7.57     4.59
+mxfp6_e3m2   mlp_proj       0.75      3.60     8.89
+mxfp6_e2m3   mlp_proj       0.61      1.93    15.25
+mxfp4        mlp_proj       0.58      1.93    15.38
+nvfp4        mlp_proj       2.43      2.33     8.11
 ```
 
 ## Result
 
 Exact emulation costs 0.77× BF16's training speed for MXFP4 and MXFP6 E2M3, 0.65× for E3M2, 0.43× for NVFP4 and 0.34× for MXFP8. These ratios measure the emulator, not the formats: a native MXFP8 tensor core would be faster than BF16. The GPU kernel stays bit-exact against the C++ references: GPU grid integers, block factors and GEMM outputs all match (`docs/journal/data/training-xcheck-gpu.txt`).
 
-Sizing: training every format on the same 300M tokens (4,578 steps of 65,536 tokens) takes about 3.5 h for BF16, 10.4 h for MXFP8, 4.6–5.4 h for each MXFP6 and MXFP4 run, and 8.2 h for NVFP4. That is about 37 GPU-hours for the six formats, leaving room inside three days for pauses and stochastic-rounding variants. 300M tokens is about 2.4 tokens per parameter, far below the ~20 of a compute-optimal run, so the comparison is between formats at equal budget, not a converged GPT-2.
+Sizing: training every format on the same 300M tokens (4,577 steps of 65,536 tokens) takes about 3.5 h for BF16, 10.4 h for MXFP8, 4.6–5.4 h for each MXFP6 and MXFP4 run, and 8.2 h for NVFP4. That is about 37 GPU-hours for the six formats, leaving room inside three days for pauses and stochastic-rounding variants. 300M tokens is about 2.4 tokens per parameter, far below the ~20 of a compute-optimal run, so the comparison is between formats at equal budget, not a converged GPT-2.
 
 ## Next
 
