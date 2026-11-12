@@ -1,6 +1,6 @@
 # Eight-lane BF16 results
 
-Verified 2026-09-13 against `e049ba1`: V4 delivers 2.29× V3's throughput on the same streamed 8×8 GEMM workload with one-third less host traffic. Both use BF16 operands/multiplication and FP32 accumulation. Physical checks pass. V3 is retired; its figures here are history (tag `archive/pre-cleanup-2026-10-30`).
+Verified 2026-09-13: V4 delivers 2.29× V3's throughput on the same streamed 8×8 GEMM workload with one-third less host traffic. Both use BF16 operands/multiplication and FP32 accumulation. Physical checks pass. V3 is retired; its figures here are history.
 
 ## Equal-work comparison
 
@@ -34,7 +34,7 @@ RTL and generic-netlist simulations each pass 1,833 functional/training jobs plu
 | Protocol | Both buffers, overlapping transfers, malformed writes, all 67 abort phases |
 | Training | BF16 forward/dW/dX/SGD, FP32 master weights; loss 57.3555→0.000779807 after 48 updates |
 | Padded GEMM | 7×13 by 13×9, four hardware jobs with retained C |
-| Regressions at `e049ba1` (history; tiles retired) | V3 RTL/netlist: 4,873 jobs plus 768 timed jobs each; V2 RTL/netlist and scalar RTL: 405 jobs each; MAC8 simulation/synthesis |
+| Regressions before the V2/V3 retirement (history) | V3 RTL/netlist: 4,873 jobs plus 768 timed jobs each; V2 RTL/netlist and scalar RTL: 405 jobs each; MAC8 simulation/synthesis |
 
 The encoding sweep is not exhaustive arithmetic conformance. Training covers one dense-layer workload.
 
