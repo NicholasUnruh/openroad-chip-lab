@@ -86,28 +86,26 @@ inline float dot8_chain(const Vec &a, const Vec &b, Dot8Format f, double amax_a 
     return float(double(value(acc)) / (sa * sb));
 }
 
-// OCP MX: each 32-element block shares 2^(floor(log2 amax) - emax_elem).
-inline float mx_chain(const Vec &a, const Vec &b, MxElement e) {
+// OCP MX: a 32-element block shares 2^(floor(log2 amax) - emax_elem); returns the E8M0 scale.
+inline uint8_t mx_quantize(const double *block, MxElement e, std::array<uint8_t, 32> &codes) {
     int emax = e == MxElement::e4m3 ? 8 : 2;
     double max_value = e == MxElement::e4m3 ? 448.0 : 6.0;
     int exp_bits = e == MxElement::e4m3 ? 4 : 2, man_bits = e == MxElement::e4m3 ? 3 : 1;
+    double m = 0;
+    for (size_t k = 0; k < 32; ++k) m = std::max(m, std::fabs(block[k]));
+    int shared = m > 0 ? int(std::floor(std::log2(m))) - emax : -127;
+    shared = std::clamp(shared, -127, 127);
+    for (size_t k = 0; k < 32; ++k)
+        codes[k] = to_small(std::ldexp(block[k], -shared), exp_bits, man_bits, max_value);
+    return uint8_t(shared + 127);
+}
+
+inline float mx_chain(const Vec &a, const Vec &b, MxElement e) {
     uint32_t acc = 0;
     for (size_t i0 = 0; i0 < a.size(); i0 += 32) {
         std::array<uint8_t, 32> x, y;
-        uint8_t scale[2];
-        const Vec *src[2] = {&a, &b};
-        std::array<uint8_t, 32> *dst[2] = {&x, &y};
-        for (int s = 0; s < 2; ++s) {
-            double m = 0;
-            for (size_t k = 0; k < 32; ++k) m = std::max(m, std::fabs((*src[s])[i0 + k]));
-            int shared = m > 0 ? int(std::floor(std::log2(m))) - emax : -127;
-            shared = std::clamp(shared, -127, 127);
-            scale[s] = uint8_t(shared + 127);
-            for (size_t k = 0; k < 32; ++k)
-                (*dst[s])[k] =
-                    to_small(std::ldexp((*src[s])[i0 + k], -shared), exp_bits, man_bits, max_value);
-        }
-        acc = mx_dot32(x, y, scale[0], scale[1], acc, e).bits;
+        uint8_t sa = mx_quantize(&a[i0], e, x), sb = mx_quantize(&b[i0], e, y);
+        acc = mx_dot32(x, y, sa, sb, acc, e).bits;
     }
     return value(acc);
 }
