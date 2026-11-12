@@ -20,7 +20,7 @@ class VcdWindow {
     void begin(Model &dut, const std::string &bench, uint64_t cycle) {
 #if VM_TRACE
         if (bench != arg("+vcd_bench=")) return;
-        dut.trace(&file, 1);  // depth 1: every net of the flat netlist, not cell internals
+        dut.trace(&file, 2);  // depth 2: each cell instance's pins, the names OpenSTA annotates
         file.set_time_unit("1ps");
         file.set_time_resolution("1ps");
         file.open(arg("+vcd=").c_str());

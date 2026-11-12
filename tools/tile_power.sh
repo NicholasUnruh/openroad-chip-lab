@@ -31,7 +31,7 @@ python3 "$lab_dir/tools/liberty_cells.py" "$out_dir/cells.v" "$cell_lib"
 macro=
 [ "$design" = training_tile_v4 ] || macro="$lab_dir/tb/sky130_sram_1rw1r_128x256_8.v"
 # shellcheck disable=SC2086
-verilator --cc --exe --build -j 4 --trace --trace-depth 1 -Wno-fatal -Wno-lint -Wno-style \
+verilator --cc --exe --build -j 4 --trace --trace-depth 2 -Wno-fatal -Wno-lint -Wno-style \
     --top-module "$design" --Mdir "$out_dir/sim" "$results/6_final.v" "$out_dir/cells.v" $macro \
     "$lab_dir/tb/$test.cpp" -CFLAGS "-std=c++17 -O1 -fno-fast-math -ffp-contract=off -I$lab_dir/tb" \
     > "$out_dir/verilator.log" 2>&1
@@ -53,13 +53,19 @@ report_power
 exit
 TCL
 "$openroad" -no_init -exit "$out_dir/power.tcl" > "$out_dir/power.txt" 2>&1
-# report_power rows: group, internal, switching, leakage, total (W), percent.
+# report_power rows: group, internal, switching, leakage, total (W), percent. The run fails if
+# more than 1% of pins fell back to default activity instead of the VCD.
 awk -v cycles="$cycles" -v flops="$flops" '
+    $1 == "vcd" { annotated = $2 }
+    $1 == "unannotated" { unannotated = $2 }
     $1 == "Macro" { macro = $5 }
     $1 == "Total" { total = $5 }
     END {
         seconds = cycles * 25e-9; macs = flops / 2
         printf "cycles=%d macs=%d total_power_w=%s macro_power_w=%s\n", cycles, macs, total, macro
+        printf "annotated_pins=%d unannotated_pins=%d\n", annotated, unannotated
         printf "energy_per_mac_pj=%.3f stdcell_energy_per_mac_pj=%.3f\n", \
             total * seconds / macs * 1e12, (total - macro) * seconds / macs * 1e12
-    }' "$out_dir/power.txt" | tee "$out_dir/summary.txt"
+        if (unannotated * 100 > annotated + unannotated) { print "error: VCD covers too few pins"; exit 1 }
+    }' "$out_dir/power.txt" > "$out_dir/summary.txt" || { cat "$out_dir/summary.txt"; exit 1; }
+cat "$out_dir/summary.txt"
