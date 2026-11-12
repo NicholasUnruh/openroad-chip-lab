@@ -38,8 +38,10 @@ largest relative difference:     2.38e-07
 
 The emulator now matches the chip lab's NVFP4 unit bit for bit: the CPU reference and the GPU kernel both agree with `nvfp4_chain` on every element and every GEMM output in the randomized cross-check. The provisional definition quantized every element identically on this data, but 43% of its GEMM outputs were off by 1 ulp (at most 2.4 × 10⁻⁷ relative), because it rounded twice per 32 elements. That difference is far below the quantization error of FP4 itself, so it could not have changed a training result measurably. Still, a bit-exact claim needs bit-exact arithmetic. No NVFP4 training had run on the old definition.
 
+Exactness costs speed here. The three-term rounding runs once per 32 elements, where the old definition did two plain additions. NVFP4 training throughput dropped from 10.1k to 7.4k tokens/s, 0.31× BF16 (`train.py --format nvfp4 --micro 4 --max-steps 4`, mean of steps 2–4; peak memory unchanged at 6.4 GB; `docs/journal/data/training-throughput.json`). The NVFP4 run therefore takes about 11.3 h instead of 8.2 h, and the six formats about 40 GPU-hours.
+
 The NVFP4 numbers stay labelled provisional in one respect: stochastic rounding, which the NVFP4 recipe applies to gradients, is not yet part of the emulator.
 
 ## Next
 
-Re-measure NVFP4 training throughput with the new kernel, which does one three-term rounding per 32 elements instead of two two-term roundings. Then continue the queued runs: BF16 and MXFP8 first.
+Continue the queued runs with the matched kernel: BF16, then MXFP8, MXFP4, NVFP4 and the two MXFP6 variants. Add stochastic rounding (the unit reference's 16-bit rule, with explicit random bits so the cross-check can feed identical bits) if a format diverges.
