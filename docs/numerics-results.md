@@ -24,6 +24,10 @@ Throughput per mm² uses the routed fmax; energy uses simulated activity at 1 GH
 | — | `dot32_mxfp4` | no | 31,348 | 5.86 | 4,992 | 4.83 |
 | — | `dot8_int8` | inference only | 26,476 | 4.95 | 2,974 | 2.88 |
 
+![Throughput per mm² and MACs per nJ against final test loss relative to FP32, with the 1% gate](img/numerics-pareto.png)
+
+*Each datapath's density and energy against its training loss; only points left of the 1% gate count. MXFP8 is the best point that passes; MXFP4 is far denser but lands at +8.9%.*
+
 E4M3 and E5M2 are one recipe (E4M3 forward, E5M2 gradients), so a training chip needs both or a unit that handles both.
 
 ## Area, fmax and energy
@@ -78,7 +82,11 @@ A 64-64-10 ReLU student learns a fixed random teacher. Every forward, dW and dX 
 | MXFP4 / MXFP8 | 0.8860 | 0.0091 | 0.672 | no (+8.8%) |
 | MXFP4 | 0.8867 | 0.0094 | 0.669 | no (+8.9%) |
 
-Loss curves (10 points per run) are in `build/numerics/train_*.txt`. MXFP4 fails even with MXFP8 gradients, so the forward pass is where FP4 loses accuracy.
+Loss curves (10 points per run) are in `build/numerics/train_*.txt`; `tools/plot_figures.py` draws them below.
+
+![Test loss during training for FP32, BF16 dot8, FP8, MXFP8 and MXFP4](img/numerics-loss-curves.png)
+
+*Mean test loss of three seeds: every format except MXFP4 tracks FP32 to the end.* MXFP4 fails even with MXFP8 gradients, so the forward pass is where FP4 loses accuracy.
 
 ## Choices and limitations
 
