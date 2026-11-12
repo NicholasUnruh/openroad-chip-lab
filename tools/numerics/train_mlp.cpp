@@ -1,8 +1,10 @@
 // Teacher-student training with every GEMM emulated bit-exactly by a study datapath.
 // A fixed random 64-32-10 tanh network labels Gaussian inputs; a 64-64-10 ReLU student learns
-// them with FP32 master weights and host SGD. Forward GEMMs use the recipe's forward datapath;
-// dW and dX GEMMs use its backward datapath. Reports test accuracy and loss per recipe and seed.
-// usage: build/train_mlp [steps] [seeds]
+// them with FP32 master weights and host SGD. Every step draws a fresh teacher-labelled batch, so
+// the student cannot memorize and test loss measures learning, not overfitting. Forward GEMMs use
+// the recipe's forward datapath; dW and dX GEMMs use its backward datapath. Prints the test-loss
+// curve (10 points) and the final train loss, test loss and accuracy per recipe and seed.
+// usage: build/train_mlp [steps] [seeds] [recipe]
 #include "datapaths.h"
 #include <functional>
 #include <iostream>
@@ -46,12 +48,19 @@ struct Recipe { std::string name; Dot forward, backward; };
 
 static std::vector<Recipe> recipes() {
     Dot fp32 = [](const Vec &a, const Vec &b, double, double) { return fp32_dot(a, b); };
+    Dot bf16_fma_path = [](const Vec &a, const Vec &b, double, double) { return bf16_fma(a, b); };
     Dot bf16 = [](const Vec &a, const Vec &b, double, double) { return dot8_chain(a, b, dot8_bf16); };
+    auto frame = [](int bits) {
+        return Dot([bits](const Vec &a, const Vec &b, double, double) { return dot8_chain(a, b, dot8_bf16, 0, 0, bits); });
+    };
     Dot e4m3 = [](const Vec &a, const Vec &b, double x, double y) { return dot8_chain(a, b, dot8_e4m3, x, y); };
     Dot e5m2 = [](const Vec &a, const Vec &b, double x, double y) { return dot8_chain(a, b, dot8_e5m2, x, y); };
     Dot mxfp8 = [](const Vec &a, const Vec &b, double, double) { return mx_chain(a, b, MxElement::e4m3); };
     Dot mxfp4 = [](const Vec &a, const Vec &b, double, double) { return mx_chain(a, b, MxElement::e2m1); };
-    return {{"fp32", fp32, fp32},       {"bf16_dot8", bf16, bf16},     {"fp8_tensor", e4m3, e5m2},
+    return {{"fp32", fp32, fp32},       {"bf16_fma", bf16_fma_path, bf16_fma_path}, {"bf16_dot8", bf16, bf16},
+            {"bf16_dot8_f24", frame(24), frame(24)}, {"bf16_dot8_f28", frame(28), frame(28)},
+            {"bf16_dot8_f36", frame(36), frame(36)}, {"bf16_dot8_f40", frame(40), frame(40)},
+            {"fp8_tensor", e4m3, e5m2},
             {"mxfp8", mxfp8, mxfp8},    {"mxfp4_fwd_mxfp8_bwd", mxfp4, mxfp8}, {"mxfp4", mxfp4, mxfp4}};
 }
 
@@ -115,31 +124,43 @@ static double softmax_loss(const Matrix &logits, const std::vector<unsigned> &y,
 int main(int argc, char **argv) {
     unsigned steps = argc > 1 ? unsigned(std::stoul(argv[1])) : 1500;
     unsigned seeds = argc > 2 ? unsigned(std::stoul(argv[2])) : 3;
+    std::string only = argc > 3 ? argv[3] : "";
     std::mt19937_64 teacher_rng(2026);
     std::normal_distribution<double> normal(0, 1);
     Matrix t1(in_dim * 32), t2(32 * classes);
     for (double &v : t1) v = normal(teacher_rng) / std::sqrt(double(in_dim)) * 2;
     for (double &v : t2) v = normal(teacher_rng) / std::sqrt(32.0);
-    Data train = teacher_data(4096, teacher_rng, t1, t2), test = teacher_data(2048, teacher_rng, t1, t2);
-    std::cout << "recipe seed steps train_loss test_loss test_accuracy\n";
+    Data test = teacher_data(2048, teacher_rng, t1, t2);
+    std::cout << "kind recipe seed step train_loss test_loss test_accuracy\n";
     for (const Recipe &r : recipes()) {
+        if (!only.empty() && r.name != only) continue;
         for (unsigned seed = 0; seed < seeds; ++seed) {
-            std::mt19937_64 rng(100 + seed);
+            std::mt19937_64 rng(100 + seed), data_rng(500 + seed);
             Model m{Matrix(in_dim * hidden), Matrix(hidden, 0.0), Matrix(hidden * classes), Matrix(classes, 0.0)};
             for (double &v : m.w1) v = normal(rng) * std::sqrt(2.0 / in_dim);
             for (double &v : m.w2) v = normal(rng) * std::sqrt(1.0 / hidden);
             double train_loss = 0;
+            auto evaluate = [&](unsigned step, const char *kind) {
+                Matrix pre, act;
+                unsigned correct = 0;
+                Matrix logits = forward(m, test.x, unsigned(test.y.size()), r.forward, pre, act);
+                double test_loss = softmax_loss(logits, test.y, 0, unsigned(test.y.size()), nullptr, &correct);
+                std::cout << kind << ' ' << r.name << ' ' << seed << ' ' << step << ' ' << train_loss << ' '
+                          << test_loss << ' ' << double(correct) / test.y.size() << std::endl;
+            };
             for (unsigned step = 0; step < steps; ++step) {
-                unsigned offset = (step * batch) % train.y.size();
-                Matrix x(train.x.begin() + offset * in_dim, train.x.begin() + (offset + batch) * in_dim);
+                if (step % (steps / 10) == 0) evaluate(step, "curve");
+                Data train = teacher_data(batch, data_rng, t1, t2);
+                const Matrix &x = train.x;
                 Matrix pre, act, dlogits(batch * classes);
                 Matrix logits = forward(m, x, batch, r.forward, pre, act);
-                train_loss = softmax_loss(logits, train.y, offset, batch, &dlogits, nullptr);
+                train_loss = softmax_loss(logits, train.y, 0, batch, &dlogits, nullptr);
                 Matrix dw2 = gemm(transpose(act, batch, hidden), dlogits, hidden, batch, classes, r.backward);
                 Matrix dact = gemm(dlogits, transpose(m.w2, hidden, classes), batch, classes, hidden, r.backward);
                 for (unsigned i = 0; i < dact.size(); ++i) dact[i] = pre[i] > 0 ? dact[i] : 0;
                 Matrix dw1 = gemm(transpose(x, batch, in_dim), dact, in_dim, batch, hidden, r.backward);
-                constexpr double lr = 0.2;
+                // Linear decay from 0.2 to 0.02 so the final loss is not dominated by SGD noise.
+                double lr = 0.2 - 0.18 * step / steps;
                 for (unsigned i = 0; i < m.w1.size(); ++i) m.w1[i] -= lr * dw1[i];
                 for (unsigned i = 0; i < m.w2.size(); ++i) m.w2[i] -= lr * dw2[i];
                 for (unsigned j = 0; j < hidden; ++j) {
@@ -153,12 +174,7 @@ int main(int argc, char **argv) {
                     m.b2[c] -= lr * g;
                 }
             }
-            Matrix pre, act;
-            unsigned correct = 0;
-            Matrix logits = forward(m, test.x, unsigned(test.y.size()), r.forward, pre, act);
-            double test_loss = softmax_loss(logits, test.y, 0, unsigned(test.y.size()), nullptr, &correct);
-            std::cout << r.name << ' ' << seed << ' ' << steps << ' ' << train_loss << ' ' << test_loss << ' '
-                      << double(correct) / test.y.size() << std::endl;
+            evaluate(steps, "final");
         }
     }
     return 0;

@@ -31,6 +31,10 @@ static std::string describe(const Vector &v) {
 constexpr Dot8Format format = DOT8_FORMAT == 0 ? dot8_bf16 : DOT8_FORMAT == 1 ? dot8_e4m3 : dot8_e5m2;
 constexpr unsigned man_bits = format.mantissa, width = 1 + format.exponent + format.mantissa;
 constexpr unsigned bias = (1u << (format.exponent - 1)) - 1, exp_max = (1u << format.exponent) - 1;
+#ifndef DOT8_FRAME
+#define DOT8_FRAME 32
+#endif
+constexpr int frame = DOT8_FRAME;
 constexpr const char *format_name = DOT8_FORMAT == 0 ? "bf16" : DOT8_FORMAT == 1 ? "e4m3" : "e5m2";
 
 static long double as_value(uint32_t bits) {
@@ -53,7 +57,7 @@ static void check_truncation_bound(const Vector &v, const Dot8Result &spec) {
         if (x.sig && x.lsb + int(x.width) > top) top = x.lsb + int(x.width);
     long double ulp = std::ldexp(1.0L, std::max(std::ilogb(std::fabs(e) > std::fabs(s) ? e : s) - 23, -149));
     if (e == 0 && s == 0) ulp = std::ldexp(1.0L, -149);
-    long double bound = 9 * std::ldexp(1.0L, top - 32) + ulp;
+    long double bound = 9 * std::ldexp(1.0L, top - frame) + ulp;
     require(std::fabs(s - e) <= bound, "truncation error exceeds bound: " + describe(v));
 }
 
@@ -108,7 +112,7 @@ static Vector generate(std::mt19937 &rng, unsigned kind) {
         // c cancels the first product exactly, leaving a small residue from the others.
         Vector copy = v;
         for (unsigned k = 1; k < 8; ++k) copy.a[k] = 0;
-        v.c = dot8_spec(copy.a, copy.b, 0, format).bits ^ 0x80000000u;
+        v.c = dot8_spec(copy.a, copy.b, 0, format, frame).bits ^ 0x80000000u;
         if (rng() % 2) for (unsigned k = 1; k < 8; ++k) v.a[k] = 0;
     }
     return v;
@@ -126,7 +130,7 @@ int main(int argc, char **argv) {
         for (unsigned n = 0; n < kinds * per_kind + latency; ++n) {
             if (n < kinds * per_kind) {
                 Vector v = generate(rng, n % kinds);
-                Dot8Result spec = dot8_spec(v.a, v.b, v.c, format);
+                Dot8Result spec = dot8_spec(v.a, v.b, v.c, format, frame);
                 if (spec.truncated) {
                     ++truncated;
                     check_truncation_bound(v, spec);
@@ -172,7 +176,7 @@ int main(int argc, char **argv) {
         }
         require(in_flight.empty(), "pipeline drained");
         dut.final();
-        std::cout << "PASS: fp_dot8_fp32 format=" << format_name << " vectors=" << checked << " oracle_exact=" << oracle_checked
+        std::cout << "PASS: fp_dot8_fp32 format=" << format_name << " frame=" << frame << " vectors=" << checked << " oracle_exact=" << oracle_checked
                   << " truncated=" << truncated << " flags[nx,uf+nx,of+nx,nv]=" << flag_counts[1] << ","
                   << flag_counts[3] << "," << flag_counts[5] << "," << flag_counts[16] << '\n';
         return 0;

@@ -54,9 +54,10 @@ inline float bf16_fma(const Vec &a, const Vec &b) {
     return acc;
 }
 
-// Chained 8-term fused dot products. FP8 operands are scaled so amax_a / amax_b (per vector or
-// per tensor, supplied by the caller) map to the format maximum.
-inline float dot8_chain(const Vec &a, const Vec &b, Dot8Format f, double amax_a = 0, double amax_b = 0) {
+// Chained 8-term fused dot products with a `frame`-bit alignment window. FP8 operands are scaled
+// so amax_a / amax_b (per vector or per tensor, supplied by the caller) map to the format maximum.
+inline float dot8_chain(const Vec &a, const Vec &b, Dot8Format f, double amax_a = 0, double amax_b = 0,
+                        int frame = 32) {
     bool fp8 = f.exponent != 8;
     double max_value = f.ieee ? (f.exponent == 5 ? 57344.0 : 0) : 448.0;
     double sa = fp8 ? max_value / (amax_a ? amax_a : amax(a)) : 1;
@@ -68,7 +69,7 @@ inline float dot8_chain(const Vec &a, const Vec &b, Dot8Format f, double amax_a 
             x[k] = fp8 ? to_small(a[i0 + k] * sa, f.exponent, f.mantissa, max_value) : to_bf16(float(a[i0 + k]));
             y[k] = fp8 ? to_small(b[i0 + k] * sb, f.exponent, f.mantissa, max_value) : to_bf16(float(b[i0 + k]));
         }
-        acc = dot8_spec(x, y, acc, f).bits;
+        acc = dot8_spec(x, y, acc, f, frame).bits;
     }
     return float(double(value(acc)) / (sa * sb));
 }

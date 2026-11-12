@@ -85,6 +85,10 @@ orfs_gds(
 ) for top in [
     "ppa_fma_bf16",
     "ppa_dot8_bf16",
+    "ppa_dot8_bf16_f24",
+    "ppa_dot8_bf16_f28",
+    "ppa_dot8_bf16_f36",
+    "ppa_dot8_bf16_f40",
     "ppa_dot8_e4m3",
     "ppa_dot8_e5m2",
     "ppa_dot8_int8",
