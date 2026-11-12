@@ -1,8 +1,9 @@
 """Write zero-delay Verilog models of standard cells from their Liberty logic functions.
 
 Combinational outputs become continuous assignments of the Liberty `function`; edge-triggered
-cells (`ff` groups) become one always block. The models exist so routed ASAP7 PPA netlists can
-be simulated for switching activity (tools/ppa_power.sh); they carry no timing.
+cells (`ff` groups) become one always block, with any asynchronous clear and preset. The models
+exist so routed netlists can be simulated for switching activity (tools/ppa_power.sh,
+tools/tile_power.sh); they carry no timing.
 
 usage: python3 tools/liberty_cells.py <out.v> <cell.lib[.gz]>...
 """
@@ -51,16 +52,33 @@ def cell_model(name, body):
     for pin, direction, _ in pins:
         lines.append(f"    {direction} {pin};")
     for state, ff_body in groups(body, "ff"):
-        names = [s.strip() for s in state.split(",")]
+        names = [s.strip().strip('"') for s in state.split(",")]
         clock, next_state = (
             attribute(ff_body, "clocked_on"),
             attribute(ff_body, "next_state"),
         )
+        q = names[0]
         edge = "negedge" if clock.startswith("!") else "posedge"
-        lines.append(f"    reg {names[0]} = 1'b0;")
-        lines.append(f"    wire {names[1]} = ~{names[0]};")
+        events = [f"{edge} {clock.lstrip('!')}"]
+        # Asynchronous clear and preset (SKY130 "!RESET_B", "!SET_B"); with both active the
+        # state takes clear_preset_var1.
+        conditions = []
+        for kind, value in (("clear", "1'b0"), ("preset", "1'b1")):
+            pin = attribute(ff_body, kind)
+            if pin:
+                events.append(("negedge " if pin.startswith("!") else "posedge ") + pin.lstrip("!"))
+                conditions.append((verilog_expr(pin), value))
+        both = attribute(ff_body, "clear_preset_var1")
+        if len(conditions) == 2 and both:
+            conditions.insert(
+                0,
+                (f"({conditions[0][0]}) & ({conditions[1][0]})", "1'b1" if both == "H" else "1'b0"),
+            )
+        lines.append(f"    reg {q} = 1'b0;")
+        lines.append(f"    wire {names[1]} = ~{q};")
+        update = "".join(f"if ({c}) {q} <= {v}; else " for c, v in conditions)
         lines.append(
-            f"    always @({edge} {clock.lstrip('!')}) {names[0]} <= {verilog_expr(next_state)};"
+            f"    always @({' or '.join(events)}) {update}{q} <= {verilog_expr(next_state)};"
         )
     if re.search(r"\blatch\s*\(", body) or any(
         d not in ("input", "output") for _, d, _ in pins
