@@ -63,7 +63,7 @@
   "peak_gb": 6.44
  },
  "nvfp4": {
-  "tokens_per_s": 10095,
+  "tokens_per_s": 7428,
   "steps_averaged": 3,
   "micro_batch": 4,
   "batch_tokens": 65536,

@@ -103,8 +103,9 @@ def quantize(x: torch.Tensor, fmt: Format) -> Quantized:
 
     Everything runs in float32. MX quantization only scales by powers of two, so it is exact.
     NVFP4 follows arXiv 2509.25149 Appendix B in float32 arithmetic, operation for operation as
-    the C++ reference: encode = 2688 / amax_tensor, block scale = E4M3(amax_block / 6 * encode),
-    element = E2M1(x * encode / block scale), each step one float32 rounding.
+    the C++ reference (nvfp4_quantize): s_enc = 2688 / amax_tensor, s_dec = 1 / s_enc, block
+    scale = E4M3(amax_block / 6 * s_enc), element = E2M1(x * (1 / (block scale * s_dec))), each
+    step one float32 rounding. The tensor decode factor is s_dec.
     """
     e = fmt.element
     y = x.to(torch.float32).reshape(*x.shape[:-1], -1, fmt.block)
@@ -114,9 +115,10 @@ def quantize(x: torch.Tensor, fmt: Format) -> Quantized:
         encode = torch.tensor(NVFP4_RANGE, dtype=torch.float32) / tensor_amax
         code = to_grid(amax / 6.0 * encode, E4M3)
         scale = code.to(torch.float32) * 2.0**E4M3.grid
-        safe = torch.where(scale > 0, scale, 1.0)
-        q = torch.where(scale > 0, to_grid(y * encode / safe, e), 0)
-        decode = tensor_amax / NVFP4_RANGE
+        s_dec = 1.0 / encode
+        inverse = 1.0 / (torch.where(scale > 0, scale, 1.0) * s_dec)
+        q = torch.where(scale > 0, to_grid(y * inverse, e), 0)
+        decode = float(s_dec)
     else:
         # OCP MX v1.0 section 6.3: shared exponent floor(log2 amax) - emax_elem, as E8M0.
         shared = torch.where(amax > 0, floor_log2(torch.where(amax > 0, amax, 1.0)) - e.emax, -127)
@@ -159,8 +161,10 @@ def round_to_odd_add(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 def gemm_reference(a: Quantized, b: Quantized) -> torch.Tensor:
     """C = A B^T as the hardware computes it, on the CPU.
 
-    For each K block: the exact integer dot product of the grid values, times both block scales,
-    plus the FP32 accumulator, rounded once to FP32. Blocks chain from +0 in K order.
+    For each 32 elements of K: the exact integer dot product of the grid values, times both block
+    scales, plus the FP32 accumulator, rounded once to FP32, chained from +0 in K order. The
+    NVFP4 unit (nvfp4_dot32) sums its two 16-element blocks, each times its own scale product,
+    exactly before that one rounding; the host then multiplies by s_dec_a * s_dec_b in FP32.
     """
     fmt = a.fmt
     m, k = a.q.shape
@@ -176,10 +180,16 @@ def gemm_reference(a: Quantized, b: Quantized) -> torch.Tensor:
     grid = 2.0 ** (2 * fmt.element.grid)
     sa, sb = a.scale.to(torch.float64), b.scale.to(torch.float64)
     acc = torch.zeros(m, n, dtype=torch.float32)
-    for i in range(blocks):
-        scale = sa[:, i, None] * sb[None, :, i] * grid  # exact: two short significands
-        term = exact[i].to(torch.float64) * scale
+    per_unit = 32 // fmt.block
+    for i in range(0, blocks, per_unit):
+        # Each block term is exact (two short significands times the sum). The NVFP4 pair spans
+        # under 48 bits (block sums < 2^12, scales 2^-9..448), so its float64 sum is exact too.
+        term = sum(
+            exact[j].to(torch.float64) * (sa[:, j, None] * sb[None, :, j] * grid)
+            for j in range(i, i + per_unit)
+        )
         acc = round_to_odd_add(acc.to(torch.float64), term).to(torch.float32)
     if fmt.nvfp4:
-        acc = acc * torch.tensor(a.tensor_decode * b.tensor_decode, dtype=torch.float32)
+        f32 = torch.float32
+        acc = acc * (torch.tensor(a.tensor_decode, dtype=f32) * torch.tensor(b.tensor_decode, dtype=f32))
     return acc
