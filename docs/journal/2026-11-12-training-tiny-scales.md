@@ -36,7 +36,7 @@ nvfp4           509536 elements    36488 outputs checked
 PASS
 ```
 
-MXFP8 probe, steps 108–145 (`docs/journal/data/training-mxfp8-fallback-probe.jsonl`): the fallback ran in 4 of 38 steps, with 1, 2, 2 and 1 GEMMs out of about 2,300 per step. Throughput was 7,440 tokens/s, against 7,518 tokens/s for the original run over the same steps, a cost of about 1%.
+MXFP8 probe, steps 108–145 (`docs/journal/data/training-mxfp8-fallback-probe.jsonl`): the fallback ran in 4 of 38 steps, with 1, 2, 2 and 1 GEMMs out of about 2,300 per step. Throughput was 7,440 tokens/s, against 7,518 tokens/s for the original run over the same steps, a cost of about 1%. The guard reads its result back to the host before every GEMM, and that synchronization costs more where GEMMs are fast. MXFP4 fell from 17.6k tokens/s (steps 1,800–2,169, old code) to 15.9k (the next 36 steps, new code, zero fallbacks), about 10%. Deferring the check to avoid the synchronization would need a 0.5 GB gradient snapshot on a card already at 6.9 of 8 GB, which risks the memory paging that halved throughput before. So the synchronization stays.
 
 ## Result
 
