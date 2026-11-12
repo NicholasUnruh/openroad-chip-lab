@@ -2,6 +2,7 @@
 #include "dot8_model.h"
 using Model = Vtraining_tile_v6;
 constexpr const char *design_name = "training_tile_v6";
+#include "vcd_window.h"
 #include "verilated.h"
 #include <array>
 #include <cmath>
@@ -101,17 +102,20 @@ class Chip {
     Model dut;
     std::mt19937 rng{20261018};
     uint64_t cycles = 0, written_bytes = 0, read_bytes = 0;
+    VcdWindow vcd;
     unsigned gemms = 0, jobs = 0;
     std::deque<std::pair<unsigned, uint32_t>> writes;  // overlapped scratchpad writes
 
     Chip() { reset(); }
 
     void tick() {
-        ++cycles;
         dut.clk = 0;
         dut.eval();
+        vcd.edge(cycles, false);
         dut.clk = 1;
         dut.eval();
+        vcd.edge(cycles, true);
+        ++cycles;
         dut.clk = 0;
         dut.eval();
     }
@@ -394,7 +398,9 @@ static void benchmarks(Chip &chip) {
     big.a_base = 0;
     big.b_base = 128;
     uint64_t begin = chip.cycles, begin_bytes = chip.written_bytes + chip.read_bytes;
+    chip.vcd.begin(chip.dut, "gemm32", chip.cycles);
     chip.check(big, {}, "GEMM32 benchmark");
+    chip.vcd.end(chip.cycles);
     uint64_t cycles = chip.cycles - begin,
              bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     unsigned flops = 2 * 32 * 32 * 32;
@@ -417,6 +423,7 @@ static void benchmarks(Chip &chip) {
     }
     begin = chip.cycles;
     begin_bytes = chip.written_bytes + chip.read_bytes;
+    chip.vcd.begin(chip.dut, "gemm16_pipelined", chip.cycles);
     chip.store(gemms[0]);
     for (unsigned n = 0; n < count; ++n) {
         if (n + 1 < count) chip.writes = Chip::operand_writes(gemms[n + 1]);
@@ -424,6 +431,7 @@ static void benchmarks(Chip &chip) {
         while (chip.drive_write()) chip.tick();
         chip.dut.sp_write = 0;
     }
+    chip.vcd.end(chip.cycles);
     cycles = chip.cycles - begin;
     bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     flops = count * 2 * 16 * 16 * 16;
@@ -436,11 +444,14 @@ static void benchmarks(Chip &chip) {
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     try {
+        if (VcdWindow::requested()) Verilated::traceEverOn(true);
         Chip chip;
-        shape_tests(chip);
-        flag_tests(chip);
-        protocol_tests(chip);
-        training_test(chip);
+        if (!VcdWindow::requested()) {
+            shape_tests(chip);
+            flag_tests(chip);
+            protocol_tests(chip);
+            training_test(chip);
+        }
         benchmarks(chip);
         chip.dut.final();
         std::cout << "PASS: " << design_name << " gemms=" << chip.gemms << " jobs=" << chip.jobs

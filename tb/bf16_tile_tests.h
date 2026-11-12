@@ -277,6 +277,8 @@ static void streamed_gemm_benchmark(Tile &tile) {
     }
     tile.reset();
     uint64_t begin = tile.cycles, begin_bytes = tile.written_bytes + tile.read_bytes;
+    tile.vcd.begin(tile.dut, "gemm" + std::to_string(size) + (count == 1 ? "" : "_x" + std::to_string(count)),
+                   tile.cycles);
     tile.load_bank(0, jobs[0].a);
     tile.load_bank(1, jobs[0].b);
     for (unsigned n = 0; n < jobs.size(); ++n) {
@@ -308,6 +310,7 @@ static void streamed_gemm_benchmark(Tile &tile) {
     }
     tile.dut.host_bank = (jobs.size() - 1) & 1;
     compare(tile.read(true), jobs.back().expected, "GEMM8 final drain");
+    tile.vcd.end(tile.cycles);
     uint64_t cycles = tile.cycles - begin;
     uint64_t bytes = tile.written_bytes + tile.read_bytes - begin_bytes;
     constexpr unsigned flops = count * 2 * size * size * size;

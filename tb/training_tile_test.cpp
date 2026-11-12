@@ -3,6 +3,7 @@ using Model = Vtraining_tile_v4;
 constexpr unsigned compute_cycles = 67;
 constexpr double target_mhz = 40;
 constexpr const char *design_name = "training_tile_v4";
+#include "vcd_window.h"
 #include "verilated.h"
 #include <array>
 #include <cmath>
@@ -76,15 +77,18 @@ class Tile {
     unsigned jobs = 0;
     unsigned flags = 0;
     uint64_t cycles = 0, written_bytes = 0, read_bytes = 0;
+    VcdWindow vcd;
 
     Tile() { reset(); }
 
     void tick() {
-        ++cycles;
         dut.clk = 0;
         dut.eval();
+        vcd.edge(cycles, false);
         dut.clk = 1;
         dut.eval();
+        vcd.edge(cycles, true);
+        ++cycles;
         dut.clk = 0;
         dut.eval();
     }
@@ -235,15 +239,18 @@ static double loss(const Matrix &prediction, const Matrix &target) {
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     try {
+        if (VcdWindow::requested()) Verilated::traceEverOn(true);
         Tile tile;
-        bf16_tests(tile);
-        protocol_tests(tile);
-        buffered_tests(tile);
-        bf16_training_test(tile);
-        larger_matrix_test(tile);
-        streaming_benchmark(tile);
-        streamed_gemm_benchmark<64, 8>(tile);
-        streamed_gemm_benchmark<8, 16>(tile);
+        if (!VcdWindow::requested()) {
+            bf16_tests(tile);
+            protocol_tests(tile);
+            buffered_tests(tile);
+            bf16_training_test(tile);
+            larger_matrix_test(tile);
+            streaming_benchmark(tile);
+            streamed_gemm_benchmark<64, 8>(tile);
+            streamed_gemm_benchmark<8, 16>(tile);
+        }
         streamed_gemm_benchmark<1, 32>(tile);
         tile.dut.final();
         std::cout << "PASS: " << design_name << " jobs=" << tile.jobs << '\n';
