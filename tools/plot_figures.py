@@ -403,6 +403,10 @@ def numerics_table():
 LABELS = {
     "dot32_mxfp8": ("MXFP8 32-term dot", 9, 0),
     "dot32_mxfp4": ("MXFP4 32-term dot (fails the gate)", -8, -16),
+    "dot32_mxfp6_e2m3": ("MXFP6 E2M3 32-term dot", 9, 0),
+    "dot32_mxfp6_e3m2": ("MXFP6 E3M2 (fails)", 9, -13),
+    "dot32_nvfp4": ("NVFP4 with SR (fails)", 9, 0),
+    "dot32_mxfp8_e5m2": ("MXFP8 E5M2 gradients", 9, -16),
     "dot8_e4m3": ("FP8 E4M3 dot8", 9, 7),
     "dot8_e5m2": ("FP8 E5M2 dot8", 9, -7),
     "dot8_bf16": ("BF16 dot8, V6 unit (grey: frames 24–40)", 9, -9),
