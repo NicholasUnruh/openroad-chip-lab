@@ -124,7 +124,9 @@ static void benchmarks(Chip &chip) {
     MxGemm big = random_gemm(rng, 4, 4, 1, 1);
     big.pack(0);
     uint64_t begin = chip.cycles, begin_bytes = chip.written_bytes + chip.read_bytes;
+    chip.vcd.begin(chip.dut, "gemm32", chip.cycles);
     chip.check(big, {}, "GEMM32 benchmark");
+    chip.vcd.end(chip.cycles);
     uint64_t cycles = chip.cycles - begin,
              bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     unsigned flops = 2 * 32 * 32 * 32, fill = 2 * 32 * 32 / 4 + 2 * 4 * 2;
@@ -145,6 +147,7 @@ static void benchmarks(Chip &chip) {
     }
     begin = chip.cycles;
     begin_bytes = chip.written_bytes + chip.read_bytes;
+    chip.vcd.begin(chip.dut, "gemm16x32_pipelined", chip.cycles);
     chip.store(gemms[0]);
     for (unsigned n = 0; n < count; ++n) {
         if (n + 1 < count) chip.writes = Chip::operand_writes(gemms[n + 1]);
@@ -155,6 +158,7 @@ static void benchmarks(Chip &chip) {
         }
         chip.dut.sp_write = 0;
     }
+    chip.vcd.end(chip.cycles);
     cycles = chip.cycles - begin;
     bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     flops = count * 2 * 16 * 16 * 32;
@@ -182,10 +186,13 @@ static void benchmarks(Chip &chip) {
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     try {
+        if (VcdWindow::requested()) Verilated::traceEverOn(true);
         Chip chip;
-        shape_tests(chip);
-        flag_tests(chip);
-        protocol_tests(chip);
+        if (!VcdWindow::requested()) {
+            shape_tests(chip);
+            flag_tests(chip);
+            protocol_tests(chip);
+        }
         benchmarks(chip);
         chip.dut.final();
         std::cout << "PASS: " << design_name << " gemms=" << chip.gemms << " jobs=" << chip.jobs

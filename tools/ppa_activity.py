@@ -1,9 +1,10 @@
 """Write a stimulus testbench for a PPA harness from realistic quantized operand streams.
 
 Each clock carries independent N(0, 1) operands quantized to the harness format (OCP MX blocks
-share a power-of-two scale); the accumulator input carries N(0, 16) FP32 values. The testbench
-drives the harness at 1 GHz, dumps a VCD of it after a pipeline warm-up, and logs every output
-so gate-level and RTL simulations can be compared (tools/ppa_power.sh).
+share a power-of-two scale, NVFP4 blocks an E4M3 scale); the accumulator input carries N(0, 16)
+FP32 values, scaled into NVFP4's encoded domain for that unit. The testbench drives the harness
+at 1 GHz, dumps a VCD of it after a pipeline warm-up, and logs every output so gate-level and RTL
+simulations can be compared (tools/ppa_power.sh).
 
 usage: python3 tools/ppa_activity.py <harness> <out_dir> [clocks]
 """
@@ -48,35 +49,63 @@ FORMATS = {
     "e4m3": (8, lambda x: small_float(x, 4, 3, 448.0)),
     "e5m2": (8, lambda x: small_float(x, 5, 2, 57344.0)),
     "e2m1": (4, lambda x: small_float(x, 2, 1, 6.0)),
+    "e3m2": (6, lambda x: small_float(x, 3, 2, 28.0)),
+    "e2m3": (6, lambda x: small_float(x, 2, 3, 7.5)),
     "int8": (8, lambda x: max(-127, min(127, round(x * 32))) & 0xFF),
 }
-# Harness: element format, elements per operand, MX block (shared scale) or not, extra ports.
+# Harness: element format, elements per operand, block scaling: None, "mx" (one E8M0 scale per
+# 32 elements) or "nv" (NVFP4: one E4M3 scale per 16 elements).
 HARNESSES = {
-    "ppa_fma_bf16": ("bf16", 1, False),
-    "ppa_dot8_bf16": ("bf16", 8, False),
-    **{f"ppa_dot8_bf16_f{frame}": ("bf16", 8, False) for frame in (24, 28, 36, 40)},
-    "ppa_dot8_e4m3": ("e4m3", 8, False),
-    "ppa_dot8_e5m2": ("e5m2", 8, False),
-    "ppa_dot8_int8": ("int8", 8, False),
-    "ppa_dot32_mxfp8": ("e4m3", 32, True),
-    "ppa_dot32_mxfp4": ("e2m1", 32, True),
+    "ppa_fma_bf16": ("bf16", 1, None),
+    "ppa_dot8_bf16": ("bf16", 8, None),
+    **{f"ppa_dot8_bf16_f{frame}": ("bf16", 8, None) for frame in (24, 28, 36, 40)},
+    "ppa_dot8_e4m3": ("e4m3", 8, None),
+    "ppa_dot8_e5m2": ("e5m2", 8, None),
+    "ppa_dot8_int8": ("int8", 8, None),
+    "ppa_dot32_mxfp8": ("e4m3", 32, "mx"),
+    "ppa_dot32_mxfp4": ("e2m1", 32, "mx"),
+    "ppa_dot32_mxfp8_e5m2": ("e5m2", 32, "mx"),
+    "ppa_dot32_mxfp6_e3m2": ("e3m2", 32, "mx"),
+    "ppa_dot32_mxfp6_e2m3": ("e2m3", 32, "mx"),
+    "ppa_dot32_nvfp4": ("e2m1", 32, "nv"),
 }
-EMAX = {"e4m3": 8, "e2m1": 2}  # largest element exponent, per OCP MX scale selection
+# Largest element exponent, per OCP MX scale selection.
+EMAX = {"e4m3": 8, "e5m2": 15, "e3m2": 4, "e2m3": 2, "e2m1": 2}
+# NVFP4 per-tensor amax: about the largest of 2,000 x 32 N(0, 1) draws per operand stream.
+NV_TENSOR_AMAX = 4.5
+# The unit sums in the encoded domain (decoding by 1 / s_enc per operand happens once per output),
+# so the NVFP4 accumulator input is scaled by s_enc^2 to keep it comparable with the block sums.
+NV_SCALE = 6 * 448 / NV_TENSOR_AMAX
 
 
-def operand(rng, fmt, count, mx):
+def e4m3_value(code):
+    field, frac = code >> 3 & 15, code & 7
+    return (frac / 8 if field == 0 else 1 + frac / 8) * 2.0 ** (max(field, 1) - 7)
+
+
+def operand(rng, fmt, count, scaling):
+    """Returns the element word, its width, the scale word and the scale width."""
     width, encode = FORMATS[fmt]
     values = [rng.gauss(0, 1) for _ in range(count)]
-    scale = 0
-    if mx:
+    scale, scale_width = 0, 0
+    if scaling == "mx":
         peak = max(abs(v) for v in values) or 1.0
         shared = math.floor(math.log2(peak)) - EMAX[fmt]
-        scale = shared + 127
+        scale, scale_width = shared + 127, 8
         values = [v / 2.0**shared for v in values]
+    elif scaling == "nv":
+        # arXiv:2509.25149 Sec. 2: block scale e4m3(amax_b / 6 * s_enc), s_enc = NV_SCALE.
+        scale_width = 16
+        for block in range(2):
+            part = values[16 * block : 16 * block + 16]
+            code = FORMATS["e4m3"][1](max(abs(v) for v in part) / 6 * NV_SCALE)
+            scale |= code << (8 * block)
+            step = e4m3_value(code) / NV_SCALE
+            values[16 * block : 16 * block + 16] = [v / step for v in part]
     word = 0
     for k, v in enumerate(values):
         word |= encode(v) << (width * k)
-    return word, width * count, scale
+    return word, width * count, scale, scale_width
 
 
 WARMUP = 16  # clocks before the VCD starts; fills the deepest (eight-clock) pipeline
@@ -129,17 +158,17 @@ def main(argv):
         return 2
     harness, out_dir = argv[1], argv[2]
     clocks = int(argv[3]) if len(argv) == 4 else 2000
-    fmt, count, mx = HARNESSES[harness]
+    fmt, count, scaling = HARNESSES[harness]
     rng = random.Random(20261019)
     ports = {}  # name -> (width, list of words)
     for _ in range(clocks):
         for name in ("a", "b"):
-            word, width, scale = operand(rng, fmt, count, mx)
+            word, width, scale, scale_width = operand(rng, fmt, count, scaling)
             ports.setdefault(name, (width, []))[1].append(word)
-            if mx:
-                ports.setdefault("scale_" + name, (8, []))[1].append(scale)
+            if scaling:
+                ports.setdefault("scale_" + name, (scale_width, []))[1].append(scale)
         c = (
-            fp32_bits(rng.gauss(0, 4))
+            fp32_bits(rng.gauss(0, 4) * (NV_SCALE**2 if scaling == "nv" else 1))
             if fmt != "int8"
             else round(rng.gauss(0, 4096)) & 0xFFFFFFFF
         )

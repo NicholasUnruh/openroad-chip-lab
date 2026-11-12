@@ -1,0 +1,6 @@
+-always-comb
+-explicit-parameter-storage-type
+-generate-label-prefix
+-explicit-function-lifetime
+-parameter-name-style
+line-length=length:130

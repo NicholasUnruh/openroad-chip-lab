@@ -3,6 +3,7 @@
 #pragma once
 #include "Vtraining_tile_v7.h"
 #include "mx_model.h"
+#include "vcd_window.h"
 #include "verilated.h"
 #include <cmath>
 #include <cstdint>
@@ -84,17 +85,20 @@ class Chip {
     Vtraining_tile_v7 dut;
     std::mt19937 rng{20261111};
     uint64_t cycles = 0, written_bytes = 0, read_bytes = 0;
+    VcdWindow vcd;
     unsigned gemms = 0, jobs = 0;
     Writes writes;  // overlapped scratchpad writes
 
     Chip() { reset(); }
 
     void tick() {
-        ++cycles;
         dut.clk = 0;
         dut.eval();
+        vcd.edge(cycles, false);
         dut.clk = 1;
         dut.eval();
+        vcd.edge(cycles, true);
+        ++cycles;
         dut.clk = 0;
         dut.eval();
     }

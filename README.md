@@ -7,7 +7,7 @@ BF16 training-accelerator tiles in Verilog, carried from RTL through bit-exact v
 | `training_tile_v4` (default) | 8 | 4,480 | 1,833 functional/training jobs each, bit-compared with FP32 `std::fma` | 716,253 µm² standard cells; setup +7.49368 ns, hold +0.33452 ns; zero routing, antenna and electrical violations |
 | `training_tile_v6` | 32 | 2,181 | 467 GEMMs each | [V6 results](docs/training-v6-results.md) |
 
-At ASAP7 (predictive 7 nm), an MXFP8 32-term block dot product gives 2.17× the throughput per mm² and 2.33× the MACs per joule of a BF16 8-term dot product and still trains within 1% of FP32; MXFP4 is 5.86× denser but misses the gate (+8.9% test loss). See [numerics results](docs/numerics-results.md).
+At ASAP7 (predictive 7 nm), against a BF16 8-term dot product, an MXFP6 E2M3 32-term block dot product gives 4.0× the throughput per mm² and 3.4× the MACs per joule and trains within 1% of FP32 (+0.64%); MXFP8 gives 1.9× and 2.3× with more margin (+0.37%). MXFP4 and NVFP4 are denser but miss the gate. See [numerics results](docs/numerics-results.md).
 
 ![Routed V2, V3, V4 and V6 cores at one scale](docs/img/layout-strip.png)
 

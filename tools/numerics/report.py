@@ -1,6 +1,6 @@
 """Print the numerics-study tables (docs/numerics-results.md) from routed metrics and accuracy runs.
 
-Reads build/ppa/<harness>/{metrics.json,power.txt} (make ppa-all) and build/numerics/
+Reads build/ppa/<harness>/{metrics.json,power.txt} (make ppa-all) and results/numerics/
 {gemm_error.txt,train_*.txt} (make numerics). ASAP7 figures are predictive: compare rows with each
 other, never with foundry data.
 
@@ -13,19 +13,24 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# Harness, MACs per clock, training recipe that exercises its arithmetic (None: inference only).
+# Harness, MACs per clock, training recipes that exercise its arithmetic (empty: inference only).
+# A point trains when any of its recipes passes.
 POINTS = [
-    ("ppa_fma_bf16", 1, "bf16_fma"),
-    ("ppa_dot8_bf16", 8, "bf16_dot8"),
-    ("ppa_dot8_bf16_f24", 8, "bf16_dot8_f24"),
-    ("ppa_dot8_bf16_f28", 8, "bf16_dot8_f28"),
-    ("ppa_dot8_bf16_f36", 8, "bf16_dot8_f36"),
-    ("ppa_dot8_bf16_f40", 8, "bf16_dot8_f40"),
-    ("ppa_dot8_e4m3", 8, "fp8_tensor"),
-    ("ppa_dot8_e5m2", 8, "fp8_tensor"),
-    ("ppa_dot32_mxfp8", 32, "mxfp8"),
-    ("ppa_dot32_mxfp4", 32, "mxfp4"),
-    ("ppa_dot8_int8", 8, None),
+    ("ppa_fma_bf16", 1, ("bf16_fma",)),
+    ("ppa_dot8_bf16", 8, ("bf16_dot8",)),
+    ("ppa_dot8_bf16_f24", 8, ("bf16_dot8_f24",)),
+    ("ppa_dot8_bf16_f28", 8, ("bf16_dot8_f28",)),
+    ("ppa_dot8_bf16_f36", 8, ("bf16_dot8_f36",)),
+    ("ppa_dot8_bf16_f40", 8, ("bf16_dot8_f40",)),
+    ("ppa_dot8_e4m3", 8, ("fp8_tensor",)),
+    ("ppa_dot8_e5m2", 8, ("fp8_tensor",)),
+    ("ppa_dot32_mxfp8", 32, ("mxfp8",)),
+    ("ppa_dot32_mxfp8_e5m2", 32, ("mxfp8_e5m2_bwd",)),
+    ("ppa_dot32_mxfp6_e3m2", 32, ("mxfp6_e3m2",)),
+    ("ppa_dot32_mxfp6_e2m3", 32, ("mxfp6_e2m3",)),
+    ("ppa_dot32_mxfp4", 32, ("mxfp4", "mxfp4_sr")),
+    ("ppa_dot32_nvfp4", 32, ("nvfp4", "nvfp4_sr")),
+    ("ppa_dot8_int8", 8, ()),
 ]
 # Training passes when its mean final test loss is within this fraction of FP32's.
 LOSS_TOLERANCE = 0.01
@@ -55,7 +60,7 @@ def ppa(harness, macs):
 
 def training():
     runs = {}
-    for path in sorted((ROOT / "build/numerics").glob("train_*.txt")):
+    for path in sorted((ROOT / "results/numerics").glob("train_*.txt")):
         for line in path.read_text().splitlines():
             f = line.split()
             if f[0] == "final":
@@ -74,7 +79,7 @@ def training():
 
 def gemm_errors():
     table = {}
-    for line in (ROOT / "build/numerics/gemm_error.txt").read_text().splitlines()[1:]:
+    for line in (ROOT / "results/numerics/gemm_error.txt").read_text().splitlines()[1:]:
         dist, k, path, median, p99 = line.split()
         table[(dist, int(k), path)] = (float(median), float(p99))
     return table
@@ -94,7 +99,7 @@ def main(argv):
     )
     print("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     rows = {}
-    for harness, macs, recipe in POINTS:
+    for harness, macs, _ in POINTS:
         p = rows[harness] = ppa(harness, macs)
         print(
             f"| `{harness[4:]}` | {macs} | {p['area']:.1f} | {p['area_per_mac']:.1f} | {p['fmax']:.0f} | "
@@ -134,15 +139,15 @@ def main(argv):
     print("\n## Ranking (training-usable points; relative to `dot8_bf16`)\n")
     base = rows["ppa_dot8_bf16"]
     ranked = []
-    for harness, macs, recipe in POINTS:
+    for harness, _, recipes in POINTS:
         p = rows[harness]
-        usable = recipe is not None and passes.get(recipe, False)
-        ranked.append((usable, p["gmacs_mm2"], harness, recipe, p))
+        usable = any(passes.get(r, False) for r in recipes)
+        ranked.append((usable, p["gmacs_mm2"], harness, recipes, p))
     ranked.sort(key=lambda r: (not r[0], -r[1]))
     print("| Rank | Point | Trains | GMAC/s/mm² | × dot8_bf16 | MAC/nJ | × dot8_bf16 |")
     print("| ---: | --- | --- | ---: | ---: | ---: | ---: |")
-    for rank, (usable, _, harness, recipe, p) in enumerate(ranked, 1):
-        trains = "inference only" if recipe is None else ("yes" if usable else "no")
+    for rank, (usable, _, harness, recipes, p) in enumerate(ranked, 1):
+        trains = "inference only" if not recipes else ("yes" if usable else "no")
         print(
             f"| {rank if usable else '—'} | `{harness[4:]}` | {trains} | {p['gmacs_mm2']:.0f} | "
             f"{p['gmacs_mm2'] / base['gmacs_mm2']:.2f} | {p['macs_nj']:.0f} | {p['macs_nj'] / base['macs_nj']:.2f} |"

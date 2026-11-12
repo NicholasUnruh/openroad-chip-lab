@@ -7,7 +7,7 @@ Inputs (all under the main checkout's build/):
   renders/training_tile_v6/   tools/physical_views.sh
   renders/module_area.json    python3 tools/module_area.py <liberty>
   layout*/metrics.json        make layout, make layout-training*
-  numerics/train_*.txt        make numerics
+and results/numerics/train_*.txt (make numerics),
 and the ASAP7 tables in docs/numerics-results.md. --site also writes WebP copies and the
 figure data as JSON to <dir>.
 """
@@ -403,6 +403,10 @@ def numerics_table():
 LABELS = {
     "dot32_mxfp8": ("MXFP8 32-term dot", 9, 0),
     "dot32_mxfp4": ("MXFP4 32-term dot (fails the gate)", -8, -16),
+    "dot32_mxfp6_e2m3": ("MXFP6 E2M3 32-term dot", 9, 0),
+    "dot32_mxfp6_e3m2": ("MXFP6 E3M2 (fails)", 9, -13),
+    "dot32_nvfp4": ("NVFP4 with SR (fails)", 9, 0),
+    "dot32_mxfp8_e5m2": ("MXFP8 E5M2 gradients", 9, -16),
     "dot8_e4m3": ("FP8 E4M3 dot8", 9, 7),
     "dot8_e5m2": ("FP8 E5M2 dot8", 9, -7),
     "dot8_bf16": ("BF16 dot8, V6 unit (grey: frames 24–40)", 9, -9),
@@ -415,8 +419,10 @@ def numerics(site):
     train = report.training()
     fp32 = train["fp32"][0]
     points = []
-    for harness, _, recipe in report.POINTS:
+    for harness, _, recipes in report.POINTS:
         point = harness[4:]
+        # Plot the point's best recipe (e.g. with or without stochastic rounding).
+        recipe = min(recipes, key=lambda r: train[r][0]) if recipes else None
         row = {"point": point, "recipe": recipe, **ppa[point]}
         if recipe:
             row["test_loss"] = round(train[recipe][0], 4)
@@ -493,7 +499,7 @@ def numerics(site):
 
 def loss_curves(site):
     curves = {}
-    for path in sorted((BUILD / "numerics").glob("train_*.txt")):
+    for path in sorted((report.ROOT / "results/numerics").glob("train_*.txt")):
         for line in path.read_text().splitlines():
             f = line.split()
             if f[0] in ("curve", "final"):

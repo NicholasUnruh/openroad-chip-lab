@@ -102,7 +102,7 @@ train-training-v7:
 
 # ASAP7 PPA harnesses: flatten with Yosys, then run ORFS to route (bin/ppa).
 # ppa_dot8_bf16_f<N> is the BF16 dot8 harness with a FRAME of N bits.
-.PHONY: ppa ppa-netlist ppa-all
+.PHONY: ppa ppa-netlist ppa-all ppa-sky130
 PPA_TOP ?= ppa_dot8_bf16
 PPA_FRAME = $(patsubst ppa_dot8_bf16_f%,%,$(filter ppa_dot8_bf16_f%,$(PPA_TOP)))
 PPA_MODULE = $(if $(PPA_FRAME),ppa_dot8_bf16,$(PPA_TOP))
@@ -114,13 +114,20 @@ ppa-netlist:
 	yosys -Q -T -l build/ppa/$(PPA_TOP)_synth.log -p 'read_verilog $(TRAINING_INCLUDES) $(PPA_RTL); $(if $(PPA_FRAME),chparam -set FRAME $(PPA_FRAME) ppa_dot8_bf16;) synth -top $(PPA_MODULE) -flatten; $(if $(PPA_FRAME),rename ppa_dot8_bf16 $(PPA_TOP);) check -assert; splitnets; write_verilog -noattr build/ppa/$(PPA_TOP).v'
 # Every study design point: flatten, route in one Bazel build, then routed power.
 PPA_HARNESSES = ppa_fma_bf16 ppa_dot8_bf16 ppa_dot8_bf16_f24 ppa_dot8_bf16_f28 ppa_dot8_bf16_f36 \
-	ppa_dot8_bf16_f40 ppa_dot8_e4m3 ppa_dot8_e5m2 ppa_dot8_int8 ppa_dot32_mxfp8 ppa_dot32_mxfp4
+	ppa_dot8_bf16_f40 ppa_dot8_e4m3 ppa_dot8_e5m2 ppa_dot8_int8 ppa_dot32_mxfp8 ppa_dot32_mxfp4 \
+	ppa_dot32_mxfp8_e5m2 ppa_dot32_mxfp6_e3m2 ppa_dot32_mxfp6_e2m3 ppa_dot32_nvfp4
 ppa-all:
 	for top in $(PPA_HARNESSES); do $(MAKE) ppa-netlist PPA_TOP=$$top || exit 1; done
 	./bin/ppa $(PPA_HARNESSES)
 	for top in $(PPA_HARNESSES); do tools/ppa_power.sh $$top || exit 1; done
+# BF16, MXFP8 and the low-bit winner routed again in SKY130HD (build/ppa-sky130hd/).
+PPA_SKY130 = ppa_dot8_bf16 ppa_dot32_mxfp8 ppa_dot32_mxfp6_e2m3
+ppa-sky130:
+	for top in $(PPA_SKY130); do $(MAKE) ppa-netlist PPA_TOP=$$top || exit 1; done
+	PPA_PDK=sky130hd ./bin/ppa $(PPA_SKY130)
+	for top in $(PPA_SKY130); do PPA_PDK=sky130hd tools/ppa_power.sh $$top || exit 1; done
 
-.PHONY: sim-dot8 sim-dot8-format sim-int8-dot8 sim-mx sim-mx-elem
+.PHONY: sim-dot8 sim-dot8-format sim-int8-dot8 sim-mx sim-mx-elem lint-mx formal-mx
 # Dot-product unit in each input format: 0 = BF16, 1 = OCP FP8 E4M3, 2 = OCP FP8 E5M2;
 # then the BF16 unit at the other alignment-frame widths of the numerics study.
 DOT8_FRAME ?= 32
@@ -135,6 +142,14 @@ sim-int8-dot8:
 # 3 = MXFP6 E3M2, 4 = MXFP6 E2M3, 5 = NVFP4 (E2M1, E4M3 scale per 16 elements).
 sim-mx:
 	for elem in 0 1 2 3 4 5; do $(MAKE) sim-mx-elem MX_ELEM=$$elem || exit 1; done
+# Verible style lint of the MX units and V7; the disabled rules are SystemVerilog idioms
+# (always_comb, typed parameters, explicit function lifetimes) this Verilog-2005 code avoids.
+lint-mx:
+	verible-verilog-lint --rules_config=tools/verible.rules rtl/mx_dot32_fp32.v rtl/fp32_round.v \
+		rtl/training_tile_v7.v rtl/ppa/ppa_dot32_*.v formal/mx_dot32_formal.v
+# Bounded proofs of every MX/NVFP4 unit against formal/mx_dot32_formal.v (several hours).
+formal-mx:
+	formal/run.sh 4
 sim-mx-elem:
 	verilator --cc --exe --build -j 4 --top-module mx_dot32_fp32 -GELEM=$(MX_ELEM) \
 		--Mdir build/mx-$(MX_ELEM)-sim rtl/mx_dot32_fp32.v rtl/fp32_round.v $(CURDIR)/tb/mx_dot32_test.cpp \
@@ -162,11 +177,11 @@ build/%: tools/numerics/%.cpp $(NUMERICS_DEPS)
 	mkdir -p build
 	g++ $(TRAINING_CFLAGS) -o $@ $<
 numerics: build/gemm_error build/train_mlp
-	mkdir -p build/numerics
-	./build/gemm_error > build/numerics/gemm_error.txt & \
-	printf '%s\n' $(TRAIN_RECIPES) | xargs -P 5 -I{} sh -c './build/train_mlp 3000 3 {} > build/numerics/train_{}.txt'; \
+	mkdir -p results/numerics
+	./build/gemm_error > results/numerics/gemm_error.txt & \
+	printf '%s\n' $(TRAIN_RECIPES) | xargs -P 5 -I{} sh -c './build/train_mlp 3000 3 {} > results/numerics/train_{}.txt'; \
 	wait
-	cat build/numerics/train_*.txt | grep '^final'
+	cat results/numerics/train_*.txt | grep '^final'
 
 # Cycle-level V4/V6 performance model: its BENCH lines must equal both RTL testbenches'
 # clock for clock; the sweep varies lanes/units, buffers/C banks and host port width.
