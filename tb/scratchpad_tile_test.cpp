@@ -66,8 +66,12 @@ static Matrix reference(const Gemm &g) {
             for (unsigned x0 = 0; x0 < inner; x0 += 8) {
                 std::array<uint16_t, 8> a8, b8;
                 for (unsigned x = 0; x < 8; ++x) {
-                    a8[x] = bits(g.ta ? g.a[(x0 + x) * g.a_cols() + i] : g.a[i * g.a_cols() + x0 + x]) >> 16;
-                    b8[x] = bits(g.tb ? g.b[j * g.b_cols() + x0 + x] : g.b[(x0 + x) * g.b_cols() + j]) >> 16;
+                    a8[x] = bits(g.ta ? g.a[(x0 + x) * g.a_cols() + i]
+                                      : g.a[i * g.a_cols() + x0 + x]) >>
+                            16;
+                    b8[x] = bits(g.tb ? g.b[j * g.b_cols() + x0 + x]
+                                      : g.b[(x0 + x) * g.b_cols() + j]) >>
+                            16;
                 }
                 acc = dot8_spec(a8, b8, acc).bits;
             }
@@ -80,18 +84,20 @@ static void compare(const Matrix &got, const Matrix &expected, const std::string
     for (size_t i = 0; i < got.size(); ++i) {
         // HardFloat's RISC-V specialization returns canonical NaNs.
         bool equal = std::isnan(expected[i]) ? bits(got[i]) == 0x7fc00000u
-                                           : bits(got[i]) == bits(expected[i]);
+                                             : bits(got[i]) == bits(expected[i]);
         require(equal, label + " element=" + std::to_string(i) +
-                       " got_bits=" + std::to_string(bits(got[i])) +
-                       " expected_bits=" + std::to_string(bits(expected[i])));
+                           " got_bits=" + std::to_string(bits(got[i])) +
+                           " expected_bits=" + std::to_string(bits(expected[i])));
     }
 }
 
 // Host behaviour while draining: probability of skipping a read cycle and maximum ack delay.
-struct HostPolicy { unsigned stall_percent = 0, max_ack_delay = 0; };
+struct HostPolicy {
+    unsigned stall_percent = 0, max_ack_delay = 0;
+};
 
 class Chip {
-public:
+   public:
     Model dut;
     std::mt19937 rng{20261018};
     uint64_t cycles = 0, written_bytes = 0, read_bytes = 0;
@@ -126,7 +132,8 @@ public:
     }
 
     // Row-major packing places each aligned 8-element row segment in one scratchpad row.
-    static void queue_matrix(std::deque<std::pair<unsigned, uint32_t>> &out, const Matrix &m, unsigned base) {
+    static void queue_matrix(std::deque<std::pair<unsigned, uint32_t>> &out, const Matrix &m,
+                             unsigned base) {
         for (unsigned i = 0; i < m.size(); i += 2) {
             uint32_t word = (bits(m[i]) >> 16) | (bits(m[i + 1]) & 0xffff0000u);
             out.emplace_back((4 * base + i / 2) & 0x3ffu, word);
@@ -212,13 +219,15 @@ public:
                 if (count < 64 && rng() % 100 >= policy.stall_percent) {
                     dut.read_addr = count;
                     dut.eval();
-                    unsigned row = 8 * (current >> 2) + count / 8, col = 8 * (current & 3) + count % 8;
+                    unsigned row = 8 * (current >> 2) + count / 8,
+                             col = 8 * (current & 3) + count % 8;
                     out[row * 8 * g.n + col] = value(dut.read_data);
                     ++count;
                     read_bytes += 4;
                 }
                 if (count == 64) {
-                    if (ack_wait) --ack_wait;
+                    if (ack_wait)
+                        --ack_wait;
                     else {
                         dut.result_ack = 1;
                         ++next_tile;
@@ -249,11 +258,13 @@ public:
 
 static Matrix random_matrix(std::mt19937 &rng, unsigned size, bool raw) {
     Matrix m(size);
-    for (float &x : m) x = raw ? value(rng() & 0xffff0000u) : bf16(float(int(rng() % 251) - 125) / 8);
+    for (float &x : m)
+        x = raw ? value(rng() & 0xffff0000u) : bf16(float(int(rng() % 251) - 125) / 8);
     return m;
 }
 
-static Gemm random_gemm(std::mt19937 &rng, unsigned m, unsigned n, unsigned k, bool ta, bool tb, bool raw) {
+static Gemm random_gemm(std::mt19937 &rng, unsigned m, unsigned n, unsigned k, bool ta, bool tb,
+                        bool raw) {
     Gemm g{m, n, k, ta, tb};
     g.a = random_matrix(rng, g.a_rows() * g.a_cols(), raw);
     g.b = random_matrix(rng, g.b_rows() * g.b_cols(), raw);
@@ -271,16 +282,19 @@ static void shape_tests(Chip &chip) {
                 for (unsigned k = 1; k <= 4; ++k) {
                     Gemm g = random_gemm(rng, m, n, k, mode & 1, mode & 2, false);
                     HostPolicy policy{count % 2 ? 30u : 0u, count % 3 ? 0u : 150u};
-                    chip.check(g, policy, "shape GEMM m=" + std::to_string(m) + " n=" + std::to_string(n) +
-                                          " k=" + std::to_string(k) + " mode=" + std::to_string(mode));
+                    chip.check(g, policy,
+                               "shape GEMM m=" + std::to_string(m) + " n=" + std::to_string(n) +
+                                   " k=" + std::to_string(k) + " mode=" + std::to_string(mode));
                     require(chip.dut.exception_flags == 0, "exact integer GEMM raises no flags");
                     ++count;
                 }
     for (unsigned test = 0; test < 64; ++test) {
-        Gemm g = random_gemm(rng, 1 + rng() % 4, 1 + rng() % 4, 1 + rng() % 4, rng() & 1, rng() & 1, true);
+        Gemm g = random_gemm(rng, 1 + rng() % 4, 1 + rng() % 4, 1 + rng() % 4, rng() & 1, rng() & 1,
+                             true);
         chip.check(g, {}, "raw-encoding GEMM");
     }
-    std::cout << "PASS: " << count << " GEMM shapes 1-4 tiles per dimension in all transpose modes; "
+    std::cout << "PASS: " << count
+              << " GEMM shapes 1-4 tiles per dimension in all transpose modes; "
               << "64 raw BF16 encoding GEMMs; wraparound bases; stalled and delayed drains\n";
 }
 
@@ -321,7 +335,8 @@ static void protocol_tests(Chip &chip) {
     compare(chip.run(g, {20, 10}), reference(g), "GEMM during scratchpad writes");
     require(chip.writes.empty(), "overlapped writes finish");
     compare(chip.run(next), reference(next), "GEMM from overlapped writes");
-    std::cout << "PASS: busy start rejection, " << aborts << " reset aborts and restarts, "
+    std::cout << "PASS: busy start rejection, " << aborts
+              << " reset aborts and restarts, "
                  "scratchpad writes overlapped with computation\n";
 }
 
@@ -380,14 +395,16 @@ static void benchmarks(Chip &chip) {
     big.b_base = 128;
     uint64_t begin = chip.cycles, begin_bytes = chip.written_bytes + chip.read_bytes;
     chip.check(big, {}, "GEMM32 benchmark");
-    uint64_t cycles = chip.cycles - begin, bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
+    uint64_t cycles = chip.cycles - begin,
+             bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     unsigned flops = 2 * 32 * 32 * 32;
     require(bytes == 2 * 32 * 32 * 2 + 32 * 32 * 4, "GEMM32 traffic accounting");
     // After the 1024-clock fill: 64 back-to-back 16-clock jobs plus fill, drain and handoff latency
     // (about 8 clocks per pipeline stage). Losing back-to-back loads would add 128 clocks.
     require(cycles - 1024 >= 64 * 16 && cycles - 1024 <= 1170, "GEMM32 job throughput");
-    std::cout << "BENCH design=" << design_name << " mode=gemm32_scratchpad cycles=" << cycles << " bytes=" << bytes
-              << " flops=" << flops << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
+    std::cout << "BENCH design=" << design_name << " mode=gemm32_scratchpad cycles=" << cycles
+              << " bytes=" << bytes << " flops=" << flops
+              << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
 
     // Eight 16x16x16 GEMMs: the next operands load into the other scratchpad half while one runs.
     constexpr unsigned count = 8;
@@ -411,8 +428,8 @@ static void benchmarks(Chip &chip) {
     bytes = chip.written_bytes + chip.read_bytes - begin_bytes;
     flops = count * 2 * 16 * 16 * 16;
     require(bytes == count * (2 * 16 * 16 * 2 + 16 * 16 * 4), "GEMM16 traffic accounting");
-    std::cout << "BENCH design=" << design_name << " mode=gemm16_pipelined matrices=" << count << " cycles=" << cycles
-              << " bytes=" << bytes << " flops=" << flops
+    std::cout << "BENCH design=" << design_name << " mode=gemm16_pipelined matrices=" << count
+              << " cycles=" << cycles << " bytes=" << bytes << " flops=" << flops
               << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
 }
 
@@ -426,7 +443,8 @@ int main(int argc, char **argv) {
         training_test(chip);
         benchmarks(chip);
         chip.dut.final();
-        std::cout << "PASS: " << design_name << " gemms=" << chip.gemms << " jobs=" << chip.jobs << '\n';
+        std::cout << "PASS: " << design_name << " gemms=" << chip.gemms << " jobs=" << chip.jobs
+                  << '\n';
         return 0;
     } catch (const std::exception &error) {
         std::cerr << "FAIL: " << error.what() << '\n';

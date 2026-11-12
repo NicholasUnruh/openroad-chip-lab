@@ -29,7 +29,6 @@ void require(bool condition, const char *what) {
     }
 }
 
-
 // ---------------------------------------------------------------- V4
 
 struct V4Config {
@@ -39,17 +38,21 @@ struct V4Config {
 
 struct V4Job {
     unsigned ab_bytes, c_bytes, out_bytes;  // operand writes, FP32 C writes, result reads
-    bool accumulate;                       // retain C; otherwise start clears it
+    bool accumulate;                        // retain C; otherwise start clears it
 };
 
-struct V4Result { uint64_t cycles, bytes; };
+struct V4Result {
+    uint64_t cycles, bytes;
+};
 
 struct V4Progress {
     std::vector<unsigned> written, read;
     std::vector<bool> done;
 };
 
-bool v4_inputs_written(const V4Job &job, unsigned written) { return written >= job.ab_bytes + job.c_bytes; }
+bool v4_inputs_written(const V4Job &job, unsigned written) {
+    return written >= job.ab_bytes + job.c_bytes;
+}
 
 // Earliest job in `jobs` whose outputs are not fully read, or jobs.size().
 unsigned v4_first_unread(const std::vector<V4Job> &jobs, const V4Progress &p, unsigned limit) {
@@ -59,8 +62,8 @@ unsigned v4_first_unread(const std::vector<V4Job> &jobs, const V4Progress &p, un
 }
 
 // May the host write job w's next bytes this clock?
-bool v4_can_write(const V4Config &cfg, const std::vector<V4Job> &jobs, const V4Progress &p, unsigned w,
-                  bool busy, unsigned active, bool overlap) {
+bool v4_can_write(const V4Config &cfg, const std::vector<V4Job> &jobs, const V4Progress &p,
+                  unsigned w, bool busy, unsigned active, bool overlap) {
     if (w >= jobs.size()) return false;
     unsigned buffer = w % cfg.buffers;
     if (busy && active % cfg.buffers == buffer) return false;
@@ -87,7 +90,8 @@ V4Result run_v4(const V4Config &cfg, const std::vector<V4Job> &jobs, bool overla
                       p.read[s - cfg.buffers] >= jobs[s - cfg.buffers].out_bytes) &&
                      (overlap || v4_first_unread(jobs, p, s) == s);
         if (!start && v4_can_write(cfg, jobs, p, w, busy, active, overlap)) {
-            unsigned limit = p.written[w] < jobs[w].ab_bytes ? jobs[w].ab_bytes : jobs[w].ab_bytes + jobs[w].c_bytes;
+            unsigned limit = p.written[w] < jobs[w].ab_bytes ? jobs[w].ab_bytes
+                                                             : jobs[w].ab_bytes + jobs[w].c_bytes;
             unsigned moved = std::min(cfg.port_bytes, limit - p.written[w]);
             p.written[w] += moved;
             bytes += moved;
@@ -129,20 +133,25 @@ std::vector<V4Job> v4_gemm_jobs(unsigned count, unsigned size, unsigned buffers)
 
 struct V6Config {
     unsigned units = 4, c_banks = 2, port_bytes = 4;
-    static constexpr unsigned lat = 6;      // dot-product latency
+    static constexpr unsigned lat = 6;               // dot-product latency
     unsigned run_len() const { return 64 / units; }  // clocks per 8x8x8 job
 };
 
-struct V6Gemm { unsigned m, n, k; bool ta; };  // tiles per dimension
+struct V6Gemm {
+    unsigned m, n, k;
+    bool ta;
+};  // tiles per dimension
 
 class V6Tile {
-public:
-    explicit V6Tile(const V6Config &c) : cfg(c) { require(c.c_banks >= 1 && c.c_banks <= 8, "C banks"); }
+   public:
+    explicit V6Tile(const V6Config &c) : cfg(c) {
+        require(c.c_banks >= 1 && c.c_banks <= 8, "C banks");
+    }
     bool busy = false, done = false;
     bool result_valid() const { return queued > 0; }
     void tick(bool start, const V6Gemm &g, bool ack);
 
-private:
+   private:
     V6Config cfg;
     unsigned m_max = 0, n_max = 0, k_max = 0;
     bool ta = false;
@@ -164,10 +173,16 @@ private:
 };
 
 void V6Tile::advance_loader() {
-    if (ld_k != k_max) { ++ld_k; return; }
+    if (ld_k != k_max) {
+        ++ld_k;
+        return;
+    }
     ld_k = 0;
     ld_cbank = (ld_cbank + 1) % cfg.c_banks;
-    if (ld_j != n_max) { ++ld_j; return; }
+    if (ld_j != n_max) {
+        ++ld_j;
+        return;
+    }
     ld_j = 0;
     if (ld_i == m_max) ld_valid = false;
     ++ld_i;
@@ -211,8 +226,13 @@ void V6Tile::tick(bool start, const V6Gemm &g, bool ack) {
     if (!busy) {
         if (start) {
             busy = true;
-            m_max = g.m - 1; n_max = g.n - 1; k_max = g.k - 1; ta = g.ta;
-            ld_valid = true; ld_cbank = 0; ld_i = ld_j = ld_k = 0;
+            m_max = g.m - 1;
+            n_max = g.n - 1;
+            k_max = g.k - 1;
+            ta = g.ta;
+            ld_valid = true;
+            ld_cbank = 0;
+            ld_i = ld_j = ld_k = 0;
         }
     } else if (!ld_valid && !nxt_valid && !run_active && !any_p && pending == 0) {
         busy = false;
@@ -221,8 +241,13 @@ void V6Tile::tick(bool start, const V6Gemm &g, bool ack) {
     bool was_load_active = load_active, was_wr_valid = wr_valid;
     wr_valid = load_active;
     if (load_go) {
-        load_active = true; load_index = 0; loaded = false;
-        nxt_valid = true; nxt_cbank = ld_cbank; nxt_k0 = ld_k == 0; nxt_last = ld_k == k_max;
+        load_active = true;
+        load_index = 0;
+        loaded = false;
+        nxt_valid = true;
+        nxt_cbank = ld_cbank;
+        nxt_k0 = ld_k == 0;
+        nxt_last = ld_k == k_max;
         advance_loader();
     } else if (load_active) {
         if (load_index == last_index) load_active = false;
@@ -236,7 +261,10 @@ void V6Tile::tick(bool start, const V6Gemm &g, bool ack) {
     }
     if (eng_start) {
         nxt_valid = false;
-        run_active = true; run_cycle = 0; run_cbank = nxt_cbank; run_last = nxt_last;
+        run_active = true;
+        run_cycle = 0;
+        run_cbank = nxt_cbank;
+        run_last = nxt_last;
         if (nxt_last) inflight |= 1u << nxt_cbank;
     }
 }
@@ -274,7 +302,10 @@ struct V6Host {
                 unsigned moved = std::min(cfg.port_bytes, 256 - count);
                 count += moved;
                 bytes += moved;
-                if (count == 256) { ack = true; count = 0; }
+                if (count == 256) {
+                    ack = true;
+                    count = 0;
+                }
             }
             tick(false, g, ack);
             if (tile.done) break;
@@ -308,10 +339,11 @@ V4Result v6_gemm16_pipelined(const V6Config &cfg) {
 
 // ---------------------------------------------------------------- reports
 
-void bench_line(const char *design, const char *mode, const char *extra, V4Result r, unsigned flops) {
-    std::printf("BENCH design=%s mode=%s%s cycles=%llu bytes=%llu flops=%u target_mflops=%g\n", design, mode,
-                extra, (unsigned long long)r.cycles, (unsigned long long)r.bytes, flops,
-                double(flops) / double(r.cycles) * target_mhz);
+void bench_line(const char *design, const char *mode, const char *extra, V4Result r,
+                unsigned flops) {
+    std::printf("BENCH design=%s mode=%s%s cycles=%llu bytes=%llu flops=%u target_mflops=%g\n",
+                design, mode, extra, (unsigned long long)r.cycles, (unsigned long long)r.bytes,
+                flops, double(flops) / double(r.cycles) * target_mhz);
 }
 
 void bench() {
@@ -320,9 +352,11 @@ void bench() {
         for (bool overlap : {false, true}) {
             std::vector<V4Job> jobs(64, V4Job{256, acc ? 256u : 0u, 256, acc});
             V4Result r = run_v4(v4, jobs, overlap);
-            std::printf("BENCH design=training_tile_v4 mode=%s overlap=%d tiles=64 cycles=%llu bytes=%llu "
-                        "flops=65536 target_mflops=%g\n", acc ? "bf16_accumulate" : "bf16_inputs", int(overlap),
-                        (unsigned long long)r.cycles, (unsigned long long)r.bytes, 65536.0 / double(r.cycles) * target_mhz);
+            std::printf(
+                "BENCH design=training_tile_v4 mode=%s overlap=%d tiles=64 cycles=%llu bytes=%llu "
+                "flops=65536 target_mflops=%g\n",
+                acc ? "bf16_accumulate" : "bf16_inputs", int(overlap), (unsigned long long)r.cycles,
+                (unsigned long long)r.bytes, 65536.0 / double(r.cycles) * target_mhz);
         }
     const unsigned shapes[3][2] = {{64, 8}, {8, 16}, {1, 32}};
     for (const auto &s : shapes) {
@@ -334,7 +368,8 @@ void bench() {
     }
     V6Config v6;
     bench_line("training_tile_v6", "gemm32_scratchpad", "", v6_gemm32(v6), 65536);
-    bench_line("training_tile_v6", "gemm16_pipelined", " matrices=8", v6_gemm16_pipelined(v6), 65536);
+    bench_line("training_tile_v6", "gemm16_pipelined", " matrices=8", v6_gemm16_pipelined(v6),
+               65536);
 }
 
 void sweep() {
@@ -346,8 +381,8 @@ void sweep() {
                 V4Config c{lanes, buffers, port};
                 V4Result r = run_v4(c, v4_gemm_jobs(1, 32, buffers), true);
                 double macs = 32768.0 / double(r.cycles);
-                std::printf("%u %u %u %llu %.2f %.3f\n", lanes, buffers, port, (unsigned long long)r.cycles, macs,
-                            macs / lanes);
+                std::printf("%u %u %u %llu %.2f %.3f\n", lanes, buffers, port,
+                            (unsigned long long)r.cycles, macs, macs / lanes);
             }
     std::printf("V6 (cycles: 32^3 with fill, eight pipelined 16^3)\n");
     std::printf("units c_banks port_bytes gemm32 gemm16x8 macs_per_clock_16x8 unit_util_16x8\n");
@@ -357,16 +392,19 @@ void sweep() {
                 V6Config c{units, banks, port};
                 V4Result a = v6_gemm32(c), b = v6_gemm16_pipelined(c);
                 double macs = 32768.0 / double(b.cycles);
-                std::printf("%u %u %u %llu %llu %.2f %.3f\n", units, banks, port, (unsigned long long)a.cycles,
-                            (unsigned long long)b.cycles, macs, macs / (8.0 * units));
+                std::printf("%u %u %u %llu %llu %.2f %.3f\n", units, banks, port,
+                            (unsigned long long)a.cycles, (unsigned long long)b.cycles, macs,
+                            macs / (8.0 * units));
             }
 }
 
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (argc == 2 && std::strcmp(argv[1], "bench") == 0) bench();
-    else if (argc == 2 && std::strcmp(argv[1], "sweep") == 0) sweep();
+    if (argc == 2 && std::strcmp(argv[1], "bench") == 0)
+        bench();
+    else if (argc == 2 && std::strcmp(argv[1], "sweep") == 0)
+        sweep();
     else {
         std::fprintf(stderr, "usage: tile_model bench | sweep\n");
         return 2;

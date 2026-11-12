@@ -4,14 +4,16 @@
 static void bf16_tests(Tile &tile) {
     require(bits(bf16(value(0x3f808000))) == 0x3f800000, "BF16 even tie");
     require(bits(bf16(value(0x3f818000))) == 0x3f820000, "BF16 odd tie");
-    struct Case { uint16_t a, b; uint32_t c; unsigned flags; };
-    const Case cases[] = {
-        {0x3f80, 0x4000, 0, 0}, {0x8000, 0x3f80, 0x80000000, 0},
-        {0x0001, 0x3f80, 0, 0}, {0x0001, 0x0001, 0, 3},
-        {0x7f7f, 0x4000, 0, 5}, {0x7f80, 0x3f80, 0, 0},
-        {0x7f80, 0x0000, 0, 16}, {0x7fc1, 0x3f80, 0, 0},
-        {0x7f81, 0x3f80, 0, 16}, {0x3f80, 0x3380, 0x3f800000, 1}
+    struct Case {
+        uint16_t a, b;
+        uint32_t c;
+        unsigned flags;
     };
+    const Case cases[] = {{0x3f80, 0x4000, 0, 0},  {0x8000, 0x3f80, 0x80000000, 0},
+                          {0x0001, 0x3f80, 0, 0},  {0x0001, 0x0001, 0, 3},
+                          {0x7f7f, 0x4000, 0, 5},  {0x7f80, 0x3f80, 0, 0},
+                          {0x7f80, 0x0000, 0, 16}, {0x7fc1, 0x3f80, 0, 0},
+                          {0x7f81, 0x3f80, 0, 16}, {0x3f80, 0x3380, 0x3f800000, 1}};
     Matrix a, b, c;
     for (const auto &test : cases) {
         a.fill(value(uint32_t(test.a) << 16));
@@ -21,12 +23,17 @@ static void bf16_tests(Tile &tile) {
         require(tile.flags == test.flags, "BF16 directed exception flags");
     }
     // These small product terms must survive in C below BF16's rounding precision.
-    a.fill(0); b.fill(0); c.fill(1);
-    a[0] = 1; b[0] = value(0x3b800000);
+    a.fill(0);
+    b.fill(0);
+    c.fill(1);
+    a[0] = 1;
+    b[0] = value(0x3b800000);
     auto out = tile.run(a, b, c, false, false, true);
     require(bits(out[0]) == 0x3f808000, "FP32 accumulation retains half a BF16 ULP");
     for (unsigned lane = 0; lane < dimension; ++lane) {
-        a.fill(0); b.fill(0); c.fill(0);
+        a.fill(0);
+        b.fill(0);
+        c.fill(0);
         b[lane] = value(0x7f810000);
         tile.run(a, b, c);
         require(tile.flags == 16, "invalid exception from every lane");
@@ -46,7 +53,8 @@ static void bf16_tests(Tile &tile) {
         tile.run(a, b, c, test & 1, test & 2, test & 4);
     }
     tile.dut.host_bank = tile.dut.job_bank = 0;
-    std::cout << "PASS: " << 524 + dimension << " native BF16 numerical tiles; FP32 FMA reference, all modes, "
+    std::cout << "PASS: " << 524 + dimension
+              << " native BF16 numerical tiles; FP32 FMA reference, all modes, "
                  "special values, subnormals, exception flags, FP32 accumulation precision\n";
     for (unsigned base = 0; base < 65536; base += elements) {
         constexpr float factors[] = {1.0f, -0.5f, 1.0f / 1024, 1.9921875f};
@@ -56,14 +64,15 @@ static void bf16_tests(Tile &tile) {
             c[i] = float(int(i) - 8) / 127;
         }
         tile.dut.host_bank = tile.dut.job_bank = (base / elements) & 1;
-        tile.run(a, b, c, base & elements, base & (2*elements), base & (4*elements));
+        tile.run(a, b, c, base & elements, base & (2 * elements), base & (4 * elements));
     }
     tile.dut.host_bank = tile.dut.job_bank = 0;
-    std::cout << "PASS: all 65536 BF16 A encodings in " << 65536 / elements << " tiles against FP32 FMA reference\n";
+    std::cout << "PASS: all 65536 BF16 A encodings in " << 65536 / elements
+              << " tiles against FP32 FMA reference\n";
 }
 
-static void host_write(Tile &tile, unsigned bank, unsigned mask, unsigned addr,
-                       uint32_t data, bool accepted) {
+static void host_write(Tile &tile, unsigned bank, unsigned mask, unsigned addr, uint32_t data,
+                       bool accepted) {
     tile.dut.host_bank = bank;
     tile.dut.write_enable = mask;
     tile.dut.write_addr = addr;
@@ -77,8 +86,10 @@ static void host_write(Tile &tile, unsigned bank, unsigned mask, unsigned addr,
 static void buffered_tests(Tile &tile) {
     Matrix a, b, c, other;
     for (unsigned i = 0; i < elements; ++i) {
-        a[i] = float(int(i) - 8) / 4; b[i] = float(i + 1) / 8;
-        c[i] = 0.25f; other[i] = -float(i + 1);
+        a[i] = float(int(i) - 8) / 4;
+        b[i] = float(i + 1) / 8;
+        c[i] = 0.25f;
+        other[i] = -float(i + 1);
     }
     tile.dut.host_bank = 0;
     tile.load(a, b, c);
@@ -116,7 +127,8 @@ static void buffered_tests(Tile &tile) {
         }
         tile.dut.start = 0;
         tile.dut.host_bank = active;
-        compare(tile.read(), reference(a, b, c, false, true, true), "busy ownership and latched bank");
+        compare(tile.read(), reference(a, b, c, false, true, true),
+                "busy ownership and latched bank");
         tile.dut.host_bank = !active;
         compare(tile.read(), c, "inactive C writable throughout compute");
         tile.dut.job_bank = !active;
@@ -141,11 +153,13 @@ static void buffered_tests(Tile &tile) {
         compare(tile.read(), other, "reset preserves inactive bank");
         tile.dut.job_bank = 1;
         tile.launch(false, false, true);
-        compare(tile.finish(), reference(b, a, other, false, false, true), "restart on alternate bank");
+        compare(tile.finish(), reference(b, a, other, false, false, true),
+                "restart on alternate bank");
     }
     tile.dut.host_bank = tile.dut.job_bank = 0;
     std::cout << "PASS: dual-bank ownership, concurrent C writes, rejected malformed writes, "
-                 "latched bank, immediate switch, all " << compute_cycles << " abort phases\n";
+                 "latched bank, immediate switch, all "
+              << compute_cycles << " abort phases\n";
 }
 
 static void bf16_training_test(Tile &tile) {
@@ -155,7 +169,8 @@ static void bf16_training_test(Tile &tile) {
         x[i * dimension + (i + 1) % dimension] = i % 2 ? -0.25f : 0.25f;
     }
     Matrix target_weights, weights{}, step{};
-    for (unsigned i = 0; i < elements; ++i) target_weights[i] = float(int(i) - int(elements / 2 - 1)) / (2 * dimension);
+    for (unsigned i = 0; i < elements; ++i)
+        target_weights[i] = float(int(i) - int(elements / 2 - 1)) / (2 * dimension);
     for (unsigned i = 0; i < dimension; ++i) step[i * (dimension + 1)] = -0.125f;
     Matrix target = reference(x, target_weights, {}, false, false, false);
     double initial = 0, final_loss = 0;
@@ -186,11 +201,12 @@ static void larger_matrix_test(Tile &tile) {
     for (unsigned i = 0; i < rows; ++i)
         for (unsigned j = 0; j < cols; ++j)
             for (unsigned k = 0; k < inner; ++k)
-                expected[i * cols + j] = std::fma(a[i * inner + k], b[k * cols + j],
-                                                 expected[i * cols + j]);
+                expected[i * cols + j] =
+                    std::fma(a[i * inner + k], b[k * cols + j], expected[i * cols + j]);
     for (unsigned row = 0; row < rows; row += dimension) {
         for (unsigned col = 0; col < cols; col += dimension) {
-            tile.dut.host_bank = tile.dut.job_bank = ((row / dimension) * ((cols + dimension - 1) / dimension) + col / dimension) & 1;
+            tile.dut.host_bank = tile.dut.job_bank =
+                ((row / dimension) * ((cols + dimension - 1) / dimension) + col / dimension) & 1;
             Matrix result;
             for (unsigned k = 0; k < inner; k += dimension) {
                 Matrix block_a{}, block_b{};
@@ -216,7 +232,7 @@ static void larger_matrix_test(Tile &tile) {
     tile.dut.host_bank = tile.dut.job_bank = 0;
     std::cout << "PASS: host-tiled 7x13 times 13x9 GEMM; "
               << ((rows + dimension - 1) / dimension) * ((cols + dimension - 1) / dimension) *
-                 ((inner + dimension - 1) / dimension)
+                     ((inner + dimension - 1) / dimension)
               << " jobs, retained hardware C, padded boundaries\n";
 }
 
@@ -224,7 +240,10 @@ template <unsigned count, unsigned size>
 static void streamed_gemm_benchmark(Tile &tile) {
     constexpr unsigned blocks = size / dimension;
     static_assert(size % dimension == 0, "benchmark must tile exactly");
-    struct Job { Matrix a{}, b{}, expected{}; bool accumulate, final; };
+    struct Job {
+        Matrix a{}, b{}, expected{};
+        bool accumulate, final;
+    };
     std::vector<Job> jobs;
     std::mt19937 rng(8664);
     for (unsigned matrix = 0; matrix < count; ++matrix) {
@@ -236,8 +255,8 @@ static void streamed_gemm_benchmark(Tile &tile) {
         for (unsigned i = 0; i < size; ++i)
             for (unsigned j = 0; j < size; ++j)
                 for (unsigned k = 0; k < size; ++k)
-                    expected[i * size + j] = std::fma(a[i * size + k], b[k * size + j],
-                                                     expected[i * size + j]);
+                    expected[i * size + j] =
+                        std::fma(a[i * size + k], b[k * size + j], expected[i * size + j]);
         // Alternate two output blocks across K chunks so each buffer retains its partial C.
         for (unsigned group = 0; group < blocks * blocks; group += 2)
             for (unsigned k = 0; k < blocks; ++k)
@@ -258,7 +277,8 @@ static void streamed_gemm_benchmark(Tile &tile) {
     }
     tile.reset();
     uint64_t begin = tile.cycles, begin_bytes = tile.written_bytes + tile.read_bytes;
-    tile.load_bank(0, jobs[0].a); tile.load_bank(1, jobs[0].b);
+    tile.load_bank(0, jobs[0].a);
+    tile.load_bank(1, jobs[0].b);
     for (unsigned n = 0; n < jobs.size(); ++n) {
         tile.dut.job_bank = n & 1;
         tile.launch(false, false, jobs[n].accumulate);
@@ -278,11 +298,13 @@ static void streamed_gemm_benchmark(Tile &tile) {
                 uint32_t data = (bits(input[addr]) >> 16) | (bits(input[addr + 1]) & 0xffff0000u);
                 host_write(tile, !(n & 1), 1u << bank, addr, data, true);
                 tile.written_bytes += 4;
-            } else tile.tick();
+            } else
+                tile.tick();
             require(bool(tile.dut.done) == (cycle == compute_cycles - 1), "GEMM8 completion");
             require(bool(tile.dut.busy) == (cycle < compute_cycles - 1), "GEMM8 busy");
         }
-        if (n && jobs[n - 1].final) compare(previous, jobs[n - 1].expected, "GEMM8 streamed reference");
+        if (n && jobs[n - 1].final)
+            compare(previous, jobs[n - 1].expected, "GEMM8 streamed reference");
     }
     tile.dut.host_bank = (jobs.size() - 1) & 1;
     compare(tile.read(true), jobs.back().expected, "GEMM8 final drain");
@@ -290,10 +312,12 @@ static void streamed_gemm_benchmark(Tile &tile) {
     uint64_t bytes = tile.written_bytes + tile.read_bytes - begin_bytes;
     constexpr unsigned flops = count * 2 * size * size * size;
     require(cycles == 2 * elements + jobs.size() * (compute_cycles + 1), "GEMM8 cycle accounting");
-    require(bytes == jobs.size() * elements * 4 + count * size * size * 4, "GEMM8 traffic accounting");
-    std::cout << "BENCH design=" << design_name << " mode=gemm" << size << "_stream matrices=" << count
-              << " jobs=" << jobs.size() << " cycles=" << cycles << " bytes=" << bytes
-              << " flops=" << flops << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
+    require(bytes == jobs.size() * elements * 4 + count * size * size * 4,
+            "GEMM8 traffic accounting");
+    std::cout << "BENCH design=" << design_name << " mode=gemm" << size
+              << "_stream matrices=" << count << " jobs=" << jobs.size() << " cycles=" << cycles
+              << " bytes=" << bytes << " flops=" << flops
+              << " target_mflops=" << double(flops) / cycles * target_mhz << '\n';
     tile.dut.host_bank = tile.dut.job_bank = 0;
 }
 
@@ -317,7 +341,8 @@ static void streaming_benchmark(Tile &tile) {
             unsigned loads = acc ? 2 * elements : elements;
             if (!overlap) {
                 for (unsigned n = 0; n < count; ++n) {
-                    tile.load_bank(0, a[n]); tile.load_bank(1, b[n]);
+                    tile.load_bank(0, a[n]);
+                    tile.load_bank(1, b[n]);
                     if (acc) tile.load_bank(2, c[n]);
                     tile.launch(n & 1, n & 2, acc);
                     for (unsigned k = 0; k < compute_cycles; ++k) tile.tick();
@@ -325,14 +350,16 @@ static void streaming_benchmark(Tile &tile) {
                     compare(tile.read(true), expected[n], "serial benchmark");
                 }
             } else {
-                tile.load_bank(0, a[0]); tile.load_bank(1, b[0]);
+                tile.load_bank(0, a[0]);
+                tile.load_bank(1, b[0]);
                 if (acc) tile.load_bank(2, c[0]);
                 for (unsigned n = 0; n < count; ++n) {
                     tile.dut.job_bank = n & 1;
                     tile.launch(n & 1, n & 2, acc);
                     tile.dut.host_bank = !(n & 1);
                     Matrix previous;
-                    unsigned duration = n + 1 < count ? std::max(loads, compute_cycles) : compute_cycles;
+                    unsigned duration =
+                        n + 1 < count ? std::max(loads, compute_cycles) : compute_cycles;
                     for (unsigned k = 0; k < duration; ++k) {
                         if (n && k < elements) {
                             tile.dut.read_addr = k;
@@ -343,15 +370,20 @@ static void streaming_benchmark(Tile &tile) {
                         if (n + 1 < count && k < loads) {
                             unsigned bank = k < elements / 2 ? 0 : k < elements ? 1 : 2;
                             unsigned addr = bank < 2 ? (k % (elements / 2)) * 2 : k - elements;
-                            const Matrix &input = bank == 0 ? a[n + 1] : bank == 1 ? b[n + 1] : c[n + 1];
+                            const Matrix &input = bank == 0   ? a[n + 1]
+                                                  : bank == 1 ? b[n + 1]
+                                                              : c[n + 1];
                             uint32_t data = bank < 2 ? (bits(input[addr]) >> 16) |
-                                                       (bits(input[addr + 1]) & 0xffff0000u)
-                                                    : bits(input[addr]);
+                                                           (bits(input[addr + 1]) & 0xffff0000u)
+                                                     : bits(input[addr]);
                             host_write(tile, !(n & 1), 1u << bank, addr, data, true);
                             tile.written_bytes += 4;
-                        } else tile.tick();
-                        require(bool(tile.dut.done) == (k == compute_cycles - 1), "streamed done pulse");
-                        require(bool(tile.dut.busy) == (k < compute_cycles - 1), "streamed busy duration");
+                        } else
+                            tile.tick();
+                        require(bool(tile.dut.done) == (k == compute_cycles - 1),
+                                "streamed done pulse");
+                        require(bool(tile.dut.busy) == (k < compute_cycles - 1),
+                                "streamed busy duration");
                     }
                     if (n) compare(previous, expected[n - 1], "concurrent result read");
                 }
@@ -360,15 +392,18 @@ static void streaming_benchmark(Tile &tile) {
             }
             uint64_t cycles = tile.cycles - begin;
             uint64_t bytes = tile.written_bytes + tile.read_bytes - begin_bytes;
-            uint64_t expected_cycles = overlap ? loads + (count - 1) * (1 + std::max(loads, compute_cycles)) +
-                                                1 + compute_cycles + elements
-                                              : count * (loads + 1 + compute_cycles + elements);
+            uint64_t expected_cycles =
+                overlap ? loads + (count - 1) * (1 + std::max(loads, compute_cycles)) + 1 +
+                              compute_cycles + elements
+                        : count * (loads + 1 + compute_cycles + elements);
             require(cycles == expected_cycles, "end-to-end streaming cycle count");
             require(bytes == count * (loads + elements) * 4, "end-to-end streaming byte count");
-            std::cout << "BENCH design=" << design_name << " mode=" << (acc ? "bf16_accumulate" : "bf16_inputs")
+            std::cout << "BENCH design=" << design_name
+                      << " mode=" << (acc ? "bf16_accumulate" : "bf16_inputs")
                       << " overlap=" << overlap << " tiles=" << count << " cycles=" << cycles
                       << " bytes=" << bytes << " flops=" << count * tile_flops
-                      << " target_mflops=" << double(count * tile_flops) / cycles * target_mhz << '\n';
+                      << " target_mflops=" << double(count * tile_flops) / cycles * target_mhz
+                      << '\n';
         }
     }
     tile.dut.host_bank = tile.dut.job_bank = 0;

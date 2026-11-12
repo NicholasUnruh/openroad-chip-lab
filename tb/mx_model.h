@@ -33,5 +33,6 @@ inline Dot8Result mx_dot32(const std::array<uint8_t, 32> &a, const std::array<ui
     if (nan || z.nan) return {canonical_nan, z.snan ? 16u : 0u, false};
     if (z.inf) return {z.sign ? 0xff800000u : 0x7f800000u, 0, false};
     term[32] = {z.sign, z.sig, z.lsb, 0};
-    return exact_round(term.data(), term.data() + term.size(), all_zero && z.sig == 0, all_negative && z.sign);
+    return exact_round(term.data(), term.data() + term.size(), all_zero && z.sig == 0,
+                       all_negative && z.sign);
 }

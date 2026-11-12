@@ -23,7 +23,8 @@ static double tensor_amax(const Matrix &m) {
 }
 
 // C[M x N] = A[M x K] * B[K x N]; K is zero-padded to a multiple of 32 for the block datapaths.
-static Matrix gemm(const Matrix &a, const Matrix &b, unsigned m, unsigned k, unsigned n, const Dot &dot) {
+static Matrix gemm(const Matrix &a, const Matrix &b, unsigned m, unsigned k, unsigned n,
+                   const Dot &dot) {
     unsigned kp = (k + 31) / 32 * 32;
     double amax_a = tensor_amax(a), amax_b = tensor_amax(b);
     std::vector<Vec> rows(m, Vec(kp, 0.0)), cols(n, Vec(kp, 0.0));
@@ -44,27 +45,51 @@ static Matrix transpose(const Matrix &a, unsigned rows, unsigned cols) {
     return t;
 }
 
-struct Recipe { std::string name; Dot forward, backward; };
+struct Recipe {
+    std::string name;
+    Dot forward, backward;
+};
 
 static std::vector<Recipe> recipes() {
     Dot fp32 = [](const Vec &a, const Vec &b, double, double) { return fp32_dot(a, b); };
     Dot bf16_fma_path = [](const Vec &a, const Vec &b, double, double) { return bf16_fma(a, b); };
-    Dot bf16 = [](const Vec &a, const Vec &b, double, double) { return dot8_chain(a, b, dot8_bf16); };
-    auto frame = [](int bits) {
-        return Dot([bits](const Vec &a, const Vec &b, double, double) { return dot8_chain(a, b, dot8_bf16, 0, 0, bits); });
+    Dot bf16 = [](const Vec &a, const Vec &b, double, double) {
+        return dot8_chain(a, b, dot8_bf16);
     };
-    Dot e4m3 = [](const Vec &a, const Vec &b, double x, double y) { return dot8_chain(a, b, dot8_e4m3, x, y); };
-    Dot e5m2 = [](const Vec &a, const Vec &b, double x, double y) { return dot8_chain(a, b, dot8_e5m2, x, y); };
-    Dot mxfp8 = [](const Vec &a, const Vec &b, double, double) { return mx_chain(a, b, MxElement::e4m3); };
-    Dot mxfp4 = [](const Vec &a, const Vec &b, double, double) { return mx_chain(a, b, MxElement::e2m1); };
-    return {{"fp32", fp32, fp32},       {"bf16_fma", bf16_fma_path, bf16_fma_path}, {"bf16_dot8", bf16, bf16},
-            {"bf16_dot8_f24", frame(24), frame(24)}, {"bf16_dot8_f28", frame(28), frame(28)},
-            {"bf16_dot8_f36", frame(36), frame(36)}, {"bf16_dot8_f40", frame(40), frame(40)},
+    auto frame = [](int bits) {
+        return Dot([bits](const Vec &a, const Vec &b, double, double) {
+            return dot8_chain(a, b, dot8_bf16, 0, 0, bits);
+        });
+    };
+    Dot e4m3 = [](const Vec &a, const Vec &b, double x, double y) {
+        return dot8_chain(a, b, dot8_e4m3, x, y);
+    };
+    Dot e5m2 = [](const Vec &a, const Vec &b, double x, double y) {
+        return dot8_chain(a, b, dot8_e5m2, x, y);
+    };
+    Dot mxfp8 = [](const Vec &a, const Vec &b, double, double) {
+        return mx_chain(a, b, MxElement::e4m3);
+    };
+    Dot mxfp4 = [](const Vec &a, const Vec &b, double, double) {
+        return mx_chain(a, b, MxElement::e2m1);
+    };
+    return {{"fp32", fp32, fp32},
+            {"bf16_fma", bf16_fma_path, bf16_fma_path},
+            {"bf16_dot8", bf16, bf16},
+            {"bf16_dot8_f24", frame(24), frame(24)},
+            {"bf16_dot8_f28", frame(28), frame(28)},
+            {"bf16_dot8_f36", frame(36), frame(36)},
+            {"bf16_dot8_f40", frame(40), frame(40)},
             {"fp8_tensor", e4m3, e5m2},
-            {"mxfp8", mxfp8, mxfp8},    {"mxfp4_fwd_mxfp8_bwd", mxfp4, mxfp8}, {"mxfp4", mxfp4, mxfp4}};
+            {"mxfp8", mxfp8, mxfp8},
+            {"mxfp4_fwd_mxfp8_bwd", mxfp4, mxfp8},
+            {"mxfp4", mxfp4, mxfp4}};
 }
 
-struct Data { Matrix x; std::vector<unsigned> y; };
+struct Data {
+    Matrix x;
+    std::vector<unsigned> y;
+};
 
 static Data teacher_data(unsigned n, std::mt19937_64 &rng, const Matrix &t1, const Matrix &t2) {
     std::normal_distribution<double> normal(0, 1);
@@ -80,16 +105,23 @@ static Data teacher_data(unsigned n, std::mt19937_64 &rng, const Matrix &t1, con
         for (unsigned c = 0; c < classes; ++c) {
             double z = 0;
             for (unsigned j = 0; j < 32; ++j) z += h[j] * t2[j * classes + c];
-            if (z > best) { best = z; d.y[s] = c; }
+            if (z > best) {
+                best = z;
+                d.y[s] = c;
+            }
         }
     }
     return d;
 }
 
-struct Model { Matrix w1, b1, w2, b2; };
+struct Model {
+    Matrix w1, b1, w2, b2;
+};
 
-// Forward pass through the datapath; returns logits and fills hidden pre-activations and ReLU output.
-static Matrix forward(const Model &m, const Matrix &x, unsigned n, const Dot &dot, Matrix &pre, Matrix &act) {
+// Forward pass through the datapath; returns logits and fills hidden pre-activations and ReLU
+// output.
+static Matrix forward(const Model &m, const Matrix &x, unsigned n, const Dot &dot, Matrix &pre,
+                      Matrix &act) {
     pre = gemm(x, m.w1, n, in_dim, hidden, dot);
     act = pre;
     for (unsigned s = 0; s < n; ++s)
@@ -104,8 +136,8 @@ static Matrix forward(const Model &m, const Matrix &x, unsigned n, const Dot &do
 }
 
 // Softmax cross-entropy; returns mean loss and writes dlogits (already divided by n).
-static double softmax_loss(const Matrix &logits, const std::vector<unsigned> &y, unsigned offset, unsigned n,
-                           Matrix *grad, unsigned *correct) {
+static double softmax_loss(const Matrix &logits, const std::vector<unsigned> &y, unsigned offset,
+                           unsigned n, Matrix *grad, unsigned *correct) {
     double loss = 0;
     for (unsigned s = 0; s < n; ++s) {
         const double *z = &logits[s * classes];
@@ -136,7 +168,8 @@ int main(int argc, char **argv) {
         if (!only.empty() && r.name != only) continue;
         for (unsigned seed = 0; seed < seeds; ++seed) {
             std::mt19937_64 rng(100 + seed), data_rng(500 + seed);
-            Model m{Matrix(in_dim * hidden), Matrix(hidden, 0.0), Matrix(hidden * classes), Matrix(classes, 0.0)};
+            Model m{Matrix(in_dim * hidden), Matrix(hidden, 0.0), Matrix(hidden * classes),
+                    Matrix(classes, 0.0)};
             for (double &v : m.w1) v = normal(rng) * std::sqrt(2.0 / in_dim);
             for (double &v : m.w2) v = normal(rng) * std::sqrt(1.0 / hidden);
             double train_loss = 0;
@@ -144,9 +177,11 @@ int main(int argc, char **argv) {
                 Matrix pre, act;
                 unsigned correct = 0;
                 Matrix logits = forward(m, test.x, unsigned(test.y.size()), r.forward, pre, act);
-                double test_loss = softmax_loss(logits, test.y, 0, unsigned(test.y.size()), nullptr, &correct);
-                std::cout << kind << ' ' << r.name << ' ' << seed << ' ' << step << ' ' << train_loss << ' '
-                          << test_loss << ' ' << double(correct) / test.y.size() << std::endl;
+                double test_loss =
+                    softmax_loss(logits, test.y, 0, unsigned(test.y.size()), nullptr, &correct);
+                std::cout << kind << ' ' << r.name << ' ' << seed << ' ' << step << ' '
+                          << train_loss << ' ' << test_loss << ' '
+                          << double(correct) / test.y.size() << std::endl;
             };
             for (unsigned step = 0; step < steps; ++step) {
                 if (step % (steps / 10) == 0) evaluate(step, "curve");
@@ -155,10 +190,13 @@ int main(int argc, char **argv) {
                 Matrix pre, act, dlogits(batch * classes);
                 Matrix logits = forward(m, x, batch, r.forward, pre, act);
                 train_loss = softmax_loss(logits, train.y, 0, batch, &dlogits, nullptr);
-                Matrix dw2 = gemm(transpose(act, batch, hidden), dlogits, hidden, batch, classes, r.backward);
-                Matrix dact = gemm(dlogits, transpose(m.w2, hidden, classes), batch, classes, hidden, r.backward);
+                Matrix dw2 = gemm(transpose(act, batch, hidden), dlogits, hidden, batch, classes,
+                                  r.backward);
+                Matrix dact = gemm(dlogits, transpose(m.w2, hidden, classes), batch, classes,
+                                   hidden, r.backward);
                 for (unsigned i = 0; i < dact.size(); ++i) dact[i] = pre[i] > 0 ? dact[i] : 0;
-                Matrix dw1 = gemm(transpose(x, batch, in_dim), dact, in_dim, batch, hidden, r.backward);
+                Matrix dw1 =
+                    gemm(transpose(x, batch, in_dim), dact, in_dim, batch, hidden, r.backward);
                 // Linear decay from 0.2 to 0.02 so the final loss is not dominated by SGD noise.
                 double lr = 0.2 - 0.18 * step / steps;
                 for (unsigned i = 0; i < m.w1.size(); ++i) m.w1[i] -= lr * dw1[i];

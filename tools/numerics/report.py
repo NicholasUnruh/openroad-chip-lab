@@ -6,6 +6,7 @@ other, never with foundry data.
 
 usage: python3 tools/numerics/report.py
 """
+
 import json
 import statistics
 import sys
@@ -40,10 +41,15 @@ def ppa(harness, macs):
     area = m["finish__design__instance__area__stdcell"]
     fmax = m["finish__timing__fmax"] / 1e6
     return {
-        "area": area, "area_per_mac": area / macs, "fmax": fmax, "slack": m["finish__timing__setup__ws"],
-        "power_mw": total * 1e3, "fj_per_mac": total / (1e9 * macs) * 1e15,
+        "area": area,
+        "area_per_mac": area / macs,
+        "fmax": fmax,
+        "slack": m["finish__timing__setup__ws"],
+        "power_mw": total * 1e3,
+        "fj_per_mac": total / (1e9 * macs) * 1e15,
         # GMAC/s per mm^2 at the routed fmax; MACs per nJ at 1 GHz activity.
-        "gmacs_mm2": macs * fmax / 1e3 / (area * 1e-6), "macs_nj": 1e6 / (total / (1e9 * macs) * 1e15),
+        "gmacs_mm2": macs * fmax / 1e3 / (area * 1e-6),
+        "macs_nj": 1e6 / (total / (1e9 * macs) * 1e15),
     }
 
 
@@ -57,8 +63,12 @@ def training():
     out = {}
     for recipe, values in runs.items():
         losses = [v[0] for v in values]
-        out[recipe] = (statistics.mean(losses), statistics.pstdev(losses), statistics.mean(v[1] for v in values),
-                       len(values))
+        out[recipe] = (
+            statistics.mean(losses),
+            statistics.pstdev(losses),
+            statistics.mean(v[1] for v in values),
+            len(values),
+        )
     return out
 
 
@@ -79,30 +89,47 @@ def main(argv):
     passes = {r: v[0] <= fp32 * (1 + LOSS_TOLERANCE) for r, v in train.items()}
 
     print("## PPA (ASAP7, routed, 1 GHz target)\n")
-    print("| Point | MACs/clk | Area µm² | Area/MAC µm² | fmax MHz | Power at 1 GHz mW | Energy fJ/MAC |")
+    print(
+        "| Point | MACs/clk | Area µm² | Area/MAC µm² | fmax MHz | Power at 1 GHz mW | Energy fJ/MAC |"
+    )
     print("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     rows = {}
     for harness, macs, recipe in POINTS:
         p = rows[harness] = ppa(harness, macs)
-        print(f"| `{harness[4:]}` | {macs} | {p['area']:.1f} | {p['area_per_mac']:.1f} | {p['fmax']:.0f} | "
-              f"{p['power_mw']:.2f} | {p['fj_per_mac']:.0f} |")
+        print(
+            f"| `{harness[4:]}` | {macs} | {p['area']:.1f} | {p['area_per_mac']:.1f} | {p['fmax']:.0f} | "
+            f"{p['power_mw']:.2f} | {p['fj_per_mac']:.0f} |"
+        )
 
     print("\n## GEMM error (median / p99 of |y - y64| / sum|a b|)\n")
     errors = gemm_errors()
-    paths = sorted({k[2] for k in errors}, key=lambda p: [k[2] for k in errors].index(p))
-    columns = [(d, k) for d in ("gaussian", "laplace", "outliers", "rows") for k in (256, 4096)]
+    paths = sorted(
+        {k[2] for k in errors}, key=lambda p: [k[2] for k in errors].index(p)
+    )
+    columns = [
+        (d, k) for d in ("gaussian", "laplace", "outliers", "rows") for k in (256, 4096)
+    ]
     print("| Datapath | " + " | ".join(f"{d} K={k}" for d, k in columns) + " |")
     print("| --- |" + " ---: |" * len(columns))
     for path in paths:
-        cells = [f"{errors[(d, k, path)][0]:.2e} / {errors[(d, k, path)][1]:.2e}" for d, k in columns]
+        cells = [
+            f"{errors[(d, k, path)][0]:.2e} / {errors[(d, k, path)][1]:.2e}"
+            for d, k in columns
+        ]
         print(f"| `{path}` | " + " | ".join(cells) + " |")
 
-    print(f"\n## Training emulation (final test loss, tolerance {LOSS_TOLERANCE:.0%} of FP32 = "
-          f"{fp32 * (1 + LOSS_TOLERANCE):.4f})\n")
-    print("| Recipe | Seeds | Test loss mean | Seed std | Test accuracy | Within tolerance |")
+    print(
+        f"\n## Training emulation (final test loss, tolerance {LOSS_TOLERANCE:.0%} of FP32 = "
+        f"{fp32 * (1 + LOSS_TOLERANCE):.4f})\n"
+    )
+    print(
+        "| Recipe | Seeds | Test loss mean | Seed std | Test accuracy | Within tolerance |"
+    )
     print("| --- | ---: | ---: | ---: | ---: | --- |")
     for recipe, (loss, std, acc, n) in train.items():
-        print(f"| `{recipe}` | {n} | {loss:.4f} | {std:.4f} | {acc:.3f} | {'yes' if passes[recipe] else 'no'} |")
+        print(
+            f"| `{recipe}` | {n} | {loss:.4f} | {std:.4f} | {acc:.3f} | {'yes' if passes[recipe] else 'no'} |"
+        )
 
     print("\n## Ranking (training-usable points; relative to `dot8_bf16`)\n")
     base = rows["ppa_dot8_bf16"]
@@ -116,8 +143,10 @@ def main(argv):
     print("| ---: | --- | --- | ---: | ---: | ---: | ---: |")
     for rank, (usable, _, harness, recipe, p) in enumerate(ranked, 1):
         trains = "inference only" if recipe is None else ("yes" if usable else "no")
-        print(f"| {rank if usable else '—'} | `{harness[4:]}` | {trains} | {p['gmacs_mm2']:.0f} | "
-              f"{p['gmacs_mm2'] / base['gmacs_mm2']:.2f} | {p['macs_nj']:.0f} | {p['macs_nj'] / base['macs_nj']:.2f} |")
+        print(
+            f"| {rank if usable else '—'} | `{harness[4:]}` | {trains} | {p['gmacs_mm2']:.0f} | "
+            f"{p['gmacs_mm2'] / base['gmacs_mm2']:.2f} | {p['macs_nj']:.0f} | {p['macs_nj'] / base['macs_nj']:.2f} |"
+        )
     return 0
 
 

@@ -17,16 +17,27 @@ int main(int argc, char **argv) {
         {"fp32_fma", fp32_dot},
         {"bf16_fma", bf16_fma},
         {"bf16_dot8", [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16); }},
-        {"bf16_dot8_f24", [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16, 0, 0, 24); }},
-        {"bf16_dot8_f28", [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16, 0, 0, 28); }},
-        {"bf16_dot8_f36", [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16, 0, 0, 36); }},
-        {"bf16_dot8_f40", [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16, 0, 0, 40); }},
-        {"e4m3_tensor", [&](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_e4m3, tensor_a, tensor_b); }},
-        {"e5m2_tensor", [&](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_e5m2, tensor_a, tensor_b); }},
+        {"bf16_dot8_f24",
+         [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16, 0, 0, 24); }},
+        {"bf16_dot8_f28",
+         [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16, 0, 0, 28); }},
+        {"bf16_dot8_f36",
+         [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16, 0, 0, 36); }},
+        {"bf16_dot8_f40",
+         [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_bf16, 0, 0, 40); }},
+        {"e4m3_tensor",
+         [&](const Vec &a, const Vec &b) {
+             return dot8_chain(a, b, dot8_e4m3, tensor_a, tensor_b);
+         }},
+        {"e5m2_tensor",
+         [&](const Vec &a, const Vec &b) {
+             return dot8_chain(a, b, dot8_e5m2, tensor_a, tensor_b);
+         }},
         {"e4m3_row", [](const Vec &a, const Vec &b) { return dot8_chain(a, b, dot8_e4m3); }},
         {"mxfp8", [](const Vec &a, const Vec &b) { return mx_chain(a, b, MxElement::e4m3); }},
         {"mxfp4", [](const Vec &a, const Vec &b) { return mx_chain(a, b, MxElement::e2m1); }},
-        {"int8_tensor", [&](const Vec &a, const Vec &b) { return int8_dot(a, b, tensor_a, tensor_b); }},
+        {"int8_tensor",
+         [&](const Vec &a, const Vec &b) { return int8_dot(a, b, tensor_a, tensor_b); }},
         {"int8_row", [](const Vec &a, const Vec &b) { return int8_dot(a, b); }},
     };
     std::cout << "distribution K datapath median_err p99_err\n";
@@ -39,7 +50,8 @@ int main(int argc, char **argv) {
             std::vector<Vec> as(samples, Vec(K)), bs(samples, Vec(K));
             tensor_a = tensor_b = 0;
             for (unsigned s = 0; s < samples; ++s) {
-                // "rows" gives each vector a log-normal magnitude, like activations of different tokens.
+                // "rows" gives each vector a log-normal magnitude, like activations of different
+                // tokens.
                 double row_scale = dist == "rows" ? std::exp(1.5 * normal(rng)) : 1;
                 for (unsigned i = 0; i < K; ++i) {
                     if (dist == "laplace") {
@@ -62,13 +74,14 @@ int main(int argc, char **argv) {
                     magnitude += std::fabs(a[i] * b[i]);
                 }
                 for (size_t p = 0; p < paths.size(); ++p)
-                    errors[p].push_back(std::fabs(double(paths[p].second(a, b)) - exact) / magnitude);
+                    errors[p].push_back(std::fabs(double(paths[p].second(a, b)) - exact) /
+                                        magnitude);
             }
             for (size_t p = 0; p < paths.size(); ++p) {
                 auto &e = errors[p];
                 std::sort(e.begin(), e.end());
-                std::cout << dist << ' ' << K << ' ' << paths[p].first << ' ' << e[e.size() / 2] << ' '
-                          << e[e.size() * 99 / 100] << '\n';
+                std::cout << dist << ' ' << K << ' ' << paths[p].first << ' ' << e[e.size() / 2]
+                          << ' ' << e[e.size() * 99 / 100] << '\n';
             }
         }
     }
