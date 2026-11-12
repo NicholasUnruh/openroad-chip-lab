@@ -49,15 +49,19 @@ read_sdc $results/6_final.sdc
 read_spef $results/6_final.spef
 read_vcd -scope TOP/$design $out_dir/activity.vcd
 report_activity_annotation
+puts "antenna_pins [llength [get_pins -quiet -of_objects [get_cells -quiet -filter {ref_name =~ sky130_fd_sc_hd__diode*} *]]]"
 report_power
 exit
 TCL
 "$openroad" -no_init -exit "$out_dir/power.tcl" > "$out_dir/power.txt" 2>&1
 # report_power rows: group, internal, switching, leakage, total (W), percent. The run fails if
-# more than 1% of pins fell back to default activity instead of the VCD.
+# more than 1% of pins fell back to default activity instead of the VCD. Antenna diodes exist only
+# in the routed database, not the simulated netlist; they add load to annotated nets and switch
+# nothing themselves, so their pins are not counted against the VCD.
 awk -v cycles="$cycles" -v flops="$flops" '
     $1 == "vcd" { annotated = $2 }
     $1 == "unannotated" { unannotated = $2 }
+    $1 == "antenna_pins" { unannotated -= $2 }
     $1 == "Macro" { macro = $5 }
     $1 == "Total" { total = $5 }
     END {
