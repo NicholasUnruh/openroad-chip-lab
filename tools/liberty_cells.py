@@ -43,6 +43,9 @@ def verilog_expr(function):
 
 
 def cell_model(name, body):
+    # A scan cell's test_cell group repeats its pins and ff for DFT tools; model the cell once.
+    for _, test_body in groups(body, "test_cell"):
+        body = body.replace(test_body, "")
     pins = []
     for pin, pin_body in groups(body, "pin"):
         pins.append(
