@@ -1,0 +1,8 @@
+# uv run --extra cuda python xcheck.py --cases 40 --kernel  (RTX 4060; each case also checks kernel.pack grid integers and factors, and kernel.gemm outputs bit for bit)
+mxfp8          1819200 elements   153054 outputs checked
+mxfp8_e5m2     1900800 elements        0 outputs checked
+mxfp6_e3m2     1959392 elements   160717 outputs checked
+mxfp6_e2m3     1868032 elements   140202 outputs checked
+mxfp4          1797216 elements   153154 outputs checked
+nvfp4          1957760 elements   160019 outputs checked
+PASS
