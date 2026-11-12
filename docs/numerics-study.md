@@ -24,15 +24,6 @@ Frame-width variants of `dot8_bf16` (24–40 bits) measure how much accumulator 
 3. **Accuracy.** Compute the error of GEMMs against an FP64 reference across data distributions; then train a fixed small model end to end with each datapath emulated bit-exactly, comparing loss curves with FP32.
 4. **Ranking.** Compute effective throughput per mm² and per joule, weighted by whether the format trains to within a set loss tolerance of FP32.
 
-## Endpoint
+## Results
 
-One results table per metric across all design points, plus the accuracy result, in [numerics-results.md](numerics-results.md) (reached 2026-11-11). The training tolerance is 1% of FP32's mean final test loss; the plan left it unset, so the value was fixed with the results. ASAP7 is predictive. Compare design points relative to each other; never quote these as foundry figures.
-
-## Milestones
-
-| Milestone | Scope |
-| --- | --- |
-| M1 | ASAP7 flow; `fma_bf16` vs `dot8_bf16` area, fmax and energy |
-| M2 | FP8 and INT8 dot products |
-| M3 | MXFP8 and MXFP4 block-scaled units |
-| M4 | GEMM error and training-accuracy emulation; final ranking |
+Tables for every metric and the training result are in [numerics-results.md](numerics-results.md). The training tolerance is 1% of FP32's mean final test loss. ASAP7 is predictive: compare design points with each other, never as foundry figures.

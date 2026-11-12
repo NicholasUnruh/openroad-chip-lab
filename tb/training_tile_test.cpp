@@ -47,14 +47,15 @@ static void require(bool condition, const std::string &message) {
     if (!condition) throw std::runtime_error(message);
 }
 
-static Matrix reference(const Matrix &a, const Matrix &b, Matrix c,
-                        bool ta, bool tb, bool accumulate) {
+static Matrix reference(const Matrix &a, const Matrix &b, Matrix c, bool ta, bool tb,
+                        bool accumulate) {
     if (!accumulate) c.fill(0.0f);
     for (int i = 0; i < dimension; ++i)
         for (int j = 0; j < dimension; ++j)
             for (int k = 0; k < dimension; ++k)
-                c[i * dimension + j] = std::fma(a[ta ? k * dimension + i : i * dimension + k],
-                                       b[tb ? j * dimension + k : k * dimension + j], c[i * dimension + j]);
+                c[i * dimension + j] =
+                    std::fma(a[ta ? k * dimension + i : i * dimension + k],
+                             b[tb ? j * dimension + k : k * dimension + j], c[i * dimension + j]);
     return c;
 }
 
@@ -62,15 +63,15 @@ static void compare(const Matrix &got, const Matrix &expected, const std::string
     for (size_t i = 0; i < got.size(); ++i) {
         // HardFloat's RISC-V specialization returns canonical NaNs.
         bool equal = std::isnan(expected[i]) ? bits(got[i]) == 0x7fc00000u
-                                           : bits(got[i]) == bits(expected[i]);
+                                             : bits(got[i]) == bits(expected[i]);
         require(equal, label + " element=" + std::to_string(i) +
-                       " got_bits=" + std::to_string(bits(got[i])) +
-                       " expected_bits=" + std::to_string(bits(expected[i])));
+                           " got_bits=" + std::to_string(bits(got[i])) +
+                           " expected_bits=" + std::to_string(bits(expected[i])));
     }
 }
 
 class Tile {
-public:
+   public:
     Model dut;
     unsigned jobs = 0;
     unsigned flags = 0;
@@ -105,10 +106,11 @@ public:
         for (unsigned i = 0; i < elements; ++i) {
             dut.write_addr = i;
             if (bank < 2) {
-                dut.write_data = (bits(bf16(matrix[i])) >> 16) |
-                                 (bits(bf16(matrix[i + 1])) & 0xffff0000u);
+                dut.write_data =
+                    (bits(bf16(matrix[i])) >> 16) | (bits(bf16(matrix[i + 1])) & 0xffff0000u);
                 ++i;
-            } else dut.write_data = bits(matrix[i]);
+            } else
+                dut.write_data = bits(matrix[i]);
             dut.eval();
             require(dut.write_ready, "idle write ready");
             tick();
@@ -140,7 +142,8 @@ public:
             if (clocked) {
                 tick();
                 read_bytes += 4;
-            } else dut.eval();
+            } else
+                dut.eval();
             out[i] = value(dut.read_data);
         }
         return out;
@@ -168,15 +171,16 @@ public:
         return out;
     }
 
-    Matrix run(const Matrix &a, const Matrix &b, const Matrix &c = {},
-               bool ta = false, bool tb = false, bool accumulate = false) {
+    Matrix run(const Matrix &a, const Matrix &b, const Matrix &c = {}, bool ta = false,
+               bool tb = false, bool accumulate = false) {
         load(a, b, c);
         launch(ta, tb, accumulate);
         dut.transpose_a = !ta;
         dut.transpose_b = !tb;
         dut.accumulate = !accumulate;
         Matrix out = finish(true);
-        compare(out, reference(bf16_matrix(a), bf16_matrix(b), c, ta, tb, accumulate), "BF16 matrix reference");
+        compare(out, reference(bf16_matrix(a), bf16_matrix(b), c, ta, tb, accumulate),
+                "BF16 matrix reference");
         return out;
     }
 };
@@ -212,7 +216,8 @@ static void protocol_tests(Tile &tile) {
         tile.launch(false, false, false);
         compare(tile.finish(), reference(a, b, {}, false, false, false), "restart after abort");
     }
-    std::cout << "PASS: " << compute_cycles << " compute cycles, busy command rejection, latched modes, start/reset priority, "
+    std::cout << "PASS: " << compute_cycles
+              << " compute cycles, busy command rejection, latched modes, start/reset priority, "
                  "abort/restart, retained operands, accumulated C, stable output\n";
 }
 

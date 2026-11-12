@@ -13,18 +13,25 @@
 #define MX_ELEM 0
 #endif
 constexpr MxElement element = MX_ELEM == 0 ? MxElement::e4m3 : MxElement::e2m1;
-constexpr unsigned width = MX_ELEM == 0 ? 8 : 4, exp_bits = MX_ELEM == 0 ? 4 : 2, man_bits = width - 1 - exp_bits;
+constexpr unsigned width = MX_ELEM == 0 ? 8 : 4, exp_bits = MX_ELEM == 0 ? 4 : 2,
+                   man_bits = width - 1 - exp_bits;
 constexpr const char *element_name = MX_ELEM == 0 ? "mxfp8_e4m3" : "mxfp4_e2m1";
 
-struct Vector { std::array<uint8_t, 32> a, b; uint8_t sa, sb; uint32_t c; };
+struct Vector {
+    std::array<uint8_t, 32> a, b;
+    uint8_t sa, sb;
+    uint32_t c;
+};
 
 static void require(bool condition, const std::string &message) {
     if (!condition) throw std::runtime_error(message);
 }
 
 static std::string describe(const Vector &v) {
-    std::string out = "sa=" + std::to_string(v.sa) + " sb=" + std::to_string(v.sb) + " c=" + std::to_string(v.c);
-    for (unsigned k = 0; k < 32; ++k) out += " " + std::to_string(v.a[k]) + "*" + std::to_string(v.b[k]);
+    std::string out =
+        "sa=" + std::to_string(v.sa) + " sb=" + std::to_string(v.sb) + " c=" + std::to_string(v.c);
+    for (unsigned k = 0; k < 32; ++k)
+        out += " " + std::to_string(v.a[k]) + "*" + std::to_string(v.b[k]);
     return out;
 }
 
@@ -48,31 +55,49 @@ static Vector generate(std::mt19937 &rng, unsigned kind) {
         if (kind == 5) v.a[k] &= uint8_t(1u << (width - 1));  // signed zeros
     }
     switch (kind) {
-    case 0: v.sa = uint8_t(rng()); v.sb = uint8_t(rng()); v.c = rng(); break;
-    case 1: v.sa = uint8_t(117 + rng() % 21); v.sb = uint8_t(117 + rng() % 21); v.c = fp32(rng, 110, 145); break;
-    case 2:
-        v.sa = uint8_t(rng() % 2 ? rng() % 8 : 247 + rng() % 8);
-        v.sb = uint8_t(rng() % 2 ? rng() % 8 : 247 + rng() % 8);
-        v.c = rng() % 2 ? fp32(rng, 0, 8) : (rng() % 2 ? fp32(rng, 245, 254) : rng() & 0x807fffffu);
-        break;
-    case 3: v.sa = 127; v.sb = 127; v.c = fp32(rng, 140, 200); break;
-    case 4: {
-        v.sa = uint8_t(120 + rng() % 15);
-        v.sb = uint8_t(120 + rng() % 15);
-        v.c = 0;
-        Dot8Result block = mx_dot32(v.a, v.b, v.sa, v.sb, 0, element);
-        v.c = (block.bits ^ 0x80000000u) + (rng() % 3) - 1;  // leaves a small residue
-        if ((v.c & 0x7f800000u) == 0x7f800000u) v.c = 0;
-        break;
-    }
-    case 5: v.sa = 127; v.sb = 127; v.c = rng() % 2 ? 0x80000000u : 0u; break;
-    default: {
-        static const uint32_t specials[] = {0x7fc00000u, 0x7f800001u, 0x7f800000u, 0xff800000u, 0u, 0x80000000u, 0x00000001u};
-        v.sa = uint8_t(rng() % 16 ? 127 : 255);
-        v.sb = uint8_t(rng() % 16 ? 127 : 255);
-        if (MX_ELEM == 0 && rng() % 4 == 0) v.a[rng() % 32] = uint8_t(0x7f | (rng() & 0x80));
-        v.c = rng() % 2 ? specials[rng() % 7] : fp32(rng, 120, 135);
-    }
+        case 0:
+            v.sa = uint8_t(rng());
+            v.sb = uint8_t(rng());
+            v.c = rng();
+            break;
+        case 1:
+            v.sa = uint8_t(117 + rng() % 21);
+            v.sb = uint8_t(117 + rng() % 21);
+            v.c = fp32(rng, 110, 145);
+            break;
+        case 2:
+            v.sa = uint8_t(rng() % 2 ? rng() % 8 : 247 + rng() % 8);
+            v.sb = uint8_t(rng() % 2 ? rng() % 8 : 247 + rng() % 8);
+            v.c = rng() % 2 ? fp32(rng, 0, 8)
+                            : (rng() % 2 ? fp32(rng, 245, 254) : rng() & 0x807fffffu);
+            break;
+        case 3:
+            v.sa = 127;
+            v.sb = 127;
+            v.c = fp32(rng, 140, 200);
+            break;
+        case 4: {
+            v.sa = uint8_t(120 + rng() % 15);
+            v.sb = uint8_t(120 + rng() % 15);
+            v.c = 0;
+            Dot8Result block = mx_dot32(v.a, v.b, v.sa, v.sb, 0, element);
+            v.c = (block.bits ^ 0x80000000u) + (rng() % 3) - 1;  // leaves a small residue
+            if ((v.c & 0x7f800000u) == 0x7f800000u) v.c = 0;
+            break;
+        }
+        case 5:
+            v.sa = 127;
+            v.sb = 127;
+            v.c = rng() % 2 ? 0x80000000u : 0u;
+            break;
+        default: {
+            static const uint32_t specials[] = {0x7fc00000u, 0x7f800001u, 0x7f800000u, 0xff800000u,
+                                                0u,          0x80000000u, 0x00000001u};
+            v.sa = uint8_t(rng() % 16 ? 127 : 255);
+            v.sb = uint8_t(rng() % 16 ? 127 : 255);
+            if (MX_ELEM == 0 && rng() % 4 == 0) v.a[rng() % 32] = uint8_t(0x7f | (rng() & 0x80));
+            v.c = rng() % 2 ? specials[rng() % 7] : fp32(rng, 120, 135);
+        }
     }
     return v;
 }
@@ -112,17 +137,18 @@ int main(int argc, char **argv) {
                 auto [v, exact] = in_flight.front();
                 in_flight.pop_front();
                 require(dut.result == exact.bits && dut.exception_flags == exact.flags,
-                        "RTL differs from exact rounding: " + describe(v) + " got=" + std::to_string(dut.result) +
-                        "/" + std::to_string(dut.exception_flags) + " expected=" + std::to_string(exact.bits) +
-                        "/" + std::to_string(exact.flags));
+                        "RTL differs from exact rounding: " + describe(v) + " got=" +
+                            std::to_string(dut.result) + "/" + std::to_string(dut.exception_flags) +
+                            " expected=" + std::to_string(exact.bits) + "/" +
+                            std::to_string(exact.flags));
                 ++flag_counts[exact.flags];
                 ++checked;
             }
         }
         dut.final();
         std::cout << "PASS: mx_dot32_fp32 element=" << element_name << " vectors=" << checked
-                  << " (all correctly rounded) flags[nx,uf+nx,of+nx,nv]=" << flag_counts[1] << "," << flag_counts[3]
-                  << "," << flag_counts[5] << "," << flag_counts[16] << '\n';
+                  << " (all correctly rounded) flags[nx,uf+nx,of+nx,nv]=" << flag_counts[1] << ","
+                  << flag_counts[3] << "," << flag_counts[5] << "," << flag_counts[16] << '\n';
         return 0;
     } catch (const std::exception &error) {
         std::cerr << "FAIL: " << error.what() << '\n';

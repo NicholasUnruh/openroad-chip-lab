@@ -2,7 +2,7 @@
 
 `training_tile_v4` computes an 8×8 matrix product with eight native BF16 lanes, fused FP32 accumulation and two buffers. It doubles operand reuse per output column compared with the retired four-lane BF16 tile.
 
-`rtl/training_tile_engine.v` keeps its earlier four-lane, unbuffered FP32 parameter defaults; `training_tile_v4` overrides all three. Leave them in place: these sources are vendored unmodified into the FPGA build.
+`rtl/training_tile_engine.v` keeps its earlier four-lane, unbuffered FP32 parameter defaults; `training_tile_v4` overrides all three. Leave them in place: these sources are vendored unmodified into the [FPGA build](https://github.com/NicholasUnruh/bf16-fpga).
 
 ```sh
 make sim-training-v4

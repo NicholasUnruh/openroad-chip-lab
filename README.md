@@ -1,26 +1,70 @@
 # OpenROAD Chip Lab
 
-Build digital ASICs from Verilog through simulation, synthesis, and SKY130HD layout. The default accelerator is an eight-lane 8×8 BF16 matrix tile with FP32 accumulation, banked operands and two buffers for overlapping transfers and computation.
+BF16 training-accelerator tiles in Verilog, carried from RTL through bit-exact verification to routed SKY130HD layout with OpenROAD, plus an ASAP7 study of which number format a training MAC should use.
+
+| Tile | BF16 MACs/clock | 32³ GEMM, clocks | Verification (RTL and Yosys netlist) | SKY130HD layout at 25 ns |
+| --- | ---: | ---: | --- | --- |
+| `training_tile_v4` (default) | 8 | 4,480 | 1,833 functional/training jobs each, bit-compared with FP32 `std::fma` | 716,253 µm² standard cells; setup +7.49368 ns, hold +0.33452 ns; zero routing, antenna and electrical violations |
+| `training_tile_v6` | 32 | 2,181 | 467 GEMMs each | [V6 results](docs/training-v6-results.md) |
+
+At ASAP7 (predictive 7 nm), an MXFP8 32-term block dot product gives 2.17× the throughput per mm² and 2.33× the MACs per joule of a BF16 8-term dot product and still trains within 1% of FP32; MXFP4 is 5.86× denser but misses the gate (+8.9% test loss). See [numerics results](docs/numerics-results.md).
+
+## Why it matters
+
+Training accelerators win or lose on MAC arithmetic, operand reuse and memory bandwidth. This repo measures each one in real hardware: a tile that routes and meets timing, a cycle model that matches the RTL clock for clock, and a format study that weighs area and energy against training accuracy.
+
+## Quick start
+
+Simulation needs Verilator, Icarus Verilog, Yosys, Python 3 and a C++17 compiler. Layout also needs Bazelisk and KLayout ([setup](docs/setup.md)).
 
 ```sh
-make sim-training
+make sim                   # 8-bit MAC warm-up core
+make sim-training-v4       # V4 tile: functional, training and timed jobs
 make sim-training-v4-netlist
-make layout-training-v4
+make sim-training-v6       # V6 tile: 467 GEMMs
+make model-check           # cycle model must match every RTL BENCH line
+make layout-training-v4    # SKY130HD RTL-to-GDS; first run builds OpenROAD
 ```
 
-The introductory 8-bit multiply-accumulate core remains available through `make sim`, `make synth`, and `make layout`.
+## Repository layout
 
-| Guide | Purpose |
+| Path | Contents |
 | --- | --- |
-| [Setup](docs/setup.md) | Tools and first build |
-| [Fused dot-product V6](docs/training-v6.md) | 32 MACs/clock, SRAM scratchpad; [interface](docs/training-v6-interface.md), [results](docs/training-v6-results.md) |
-| [Tile performance model](docs/tile-perf-model.md) | Cycle-level V4/V6 model; lane, buffer and port sweeps |
-| [Numerics study](docs/numerics-study.md) | ASAP7 BF16/FP8/MX/INT8 datapath comparison; [results](docs/numerics-results.md) |
-| [BF16 V4](docs/training-v4.md) | Default tile; [interface](docs/training-v4-interface.md), [results](docs/training-v4-results.md), [hands-on lab](docs/v4-hands-on.md) |
-| [MAC8 interface](docs/mac8.md) | RTL behavior |
-| [Learning path](docs/learning-path.md) | Fundamentals and exercises |
-| [Physical flow](docs/physical-flow.md) | Layout, results, fabrication gates |
+| `rtl/` | V4 and V6 tiles, FMA and dot-product units, MX and INT8 units, MAC8 |
+| `rtl/ppa/` | Registered harnesses for the ASAP7 numerics study |
+| `tb/` | Verilator testbenches and bit-exact C++ reference models |
+| `model/` | Cycle-level V4/V6 performance model |
+| `tools/` | Power, liberty and layout checks; numerics emulation; ORFS Bazel rules |
+| `bin/` | `layout` and `ppa` flow drivers with pass/fail gates |
+| `constraints/` | SDC timing constraints |
+| `third_party/hardfloat/` | Berkeley HardFloat, unmodified and hash-checked |
+| `docs/` | Design notes, interfaces and results |
 
-Retired tiles (scalar FP32, V2, V3, V5) live at tag `archive/pre-cleanup-2026-10-30`.
+## Results and verification
 
-**Fabrication gate:** the layout is a core. A chip needs IO, power, foundry DRC/LVS and signoff before fabrication.
+| Topic | Design | Interface | Results |
+| --- | --- | --- | --- |
+| Eight-lane BF16 tile (V4) | [design](docs/training-v4.md) | [interface](docs/training-v4-interface.md) | [results](docs/training-v4-results.md) |
+| Fused dot-product tile (V6) | [design](docs/training-v6.md) | [interface](docs/training-v6-interface.md) | [results](docs/training-v6-results.md) |
+| Numerics study at ASAP7 | [method](docs/numerics-study.md) | — | [results](docs/numerics-results.md) |
+| Cycle-level performance model | [model](docs/tile-perf-model.md) | — | lane, buffer and port sweeps |
+| SKY130HD physical flow | [flow](docs/physical-flow.md) | [MAC8](docs/mac8.md) | MAC8 layout |
+
+A guided [V4 walkthrough](docs/v4-hands-on.md) and a [learning path](docs/learning-path.md) cover the fundamentals.
+
+## Limitations
+
+- Layouts are routed cores, not chips: no pad frame, ESD, foundry DRC/LVS or timing signoff.
+- ASAP7 is a predictive PDK. Its figures rank design points against each other, never as foundry numbers.
+- Power for the SKY130HD tiles is unmeasured; ASAP7 energy comes from zero-delay simulation and omits glitch power.
+- The training check is one dense layer (V4) and a 64-unit MLP (numerics study), not transformer scale.
+
+## Related projects
+
+- [bf16-fpga](https://github.com/NicholasUnruh/bf16-fpga): the unmodified V4 tile training a dense layer on a DE1-SoC FPGA.
+- [cuda-gemm](https://github.com/NicholasUnruh/cuda-gemm): the same GEMM on a GPU, from a naive kernel to tensor cores.
+- Portfolio: https://genwealth.world
+
+## License
+
+MIT. See [LICENSE](LICENSE). Berkeley HardFloat keeps its BSD license ([third_party/hardfloat](third_party/hardfloat/README.md)).

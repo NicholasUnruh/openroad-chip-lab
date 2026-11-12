@@ -1,15 +1,24 @@
 # Setup
 
-On this Ubuntu workstation, Icarus Verilog and Yosys were already installed. Bazelisk 1.29.0 and KLayout 0.30.12 are available in `~/.local/bin` (verified 2026-09-12). The KLayout wrapper points to a user-local package under `~/.cache/openroad-chip-lab/`.
+## Tools
 
-Check the tools before a build:
+| Tool | Used by |
+| --- | --- |
+| Icarus Verilog | `make sim` (MAC8) |
+| Verilator 5 | Tile, dot-product and walkthrough simulations |
+| Yosys | `make synth`, structural checks, netlists for simulation and layout |
+| Python 3, C++17 compiler | Structural checks, testbenches, numerics emulation, cycle model |
+| [Bazelisk](https://github.com/bazelbuild/bazelisk/releases) | `make layout*` and `make ppa*` |
+| [KLayout](https://www.klayout.de/build.html) | GDS output and inspection |
+
+Check them before a build:
 
 ```sh
-command -v iverilog yosys bazelisk klayout
+command -v iverilog verilator yosys python3 g++ bazelisk klayout
 bazelisk version
 klayout -v
 ```
 
-`make sim` and `make synth` need no OpenROAD build. `make layout` clones the pinned [bazel-orfs](https://github.com/The-OpenROAD-Project/bazel-orfs) checkout under `~/.cache/openroad-chip-lab/bazel-orfs`, then builds OpenROAD, Yosys and dependencies from source on first use. Its local GDS target requires the real KLayout binary.
+## Physical flow
 
-For another machine, get Bazelisk from its [official releases](https://github.com/bazelbuild/bazelisk/releases) and KLayout from the [official downloads](https://www.klayout.de/build.html). Run the tool checks above before `make layout`.
+`make sim` and `make synth` need no OpenROAD build. `make layout` clones the pinned [bazel-orfs](https://github.com/The-OpenROAD-Project/bazel-orfs) checkout into `${XDG_CACHE_HOME:-~/.cache}/openroad-chip-lab/bazel-orfs` (override with `ORFS_TOOL_DIR`), then builds OpenROAD, Yosys and their dependencies from source on first use. Its GDS target needs the real KLayout binary on `PATH`.

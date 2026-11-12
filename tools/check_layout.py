@@ -39,6 +39,12 @@ if __name__ == "__main__":
         check(Path(args[0]), setup=not fmax)
     except (ValueError, KeyError, OSError) as error:
         print(f"error: layout checks failed: {error}")
-        print("help: inspect metrics.json, timing.rpt and router_drc.rpt in the layout directory")
+        print(
+            "help: inspect metrics.json, timing.rpt and router_drc.rpt in the layout directory"
+        )
         sys.exit(1)
-    print("layout_checks: " + ("hold" if fmax else "setup, hold") + ", slew, capacitance, fanout and router DRC passed")
+    print(
+        "layout_checks: "
+        + ("hold" if fmax else "setup, hold")
+        + ", slew, capacitance, fanout and router DRC passed"
+    )
