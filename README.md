@@ -9,9 +9,13 @@ BF16 training-accelerator tiles in Verilog, carried from RTL through bit-exact v
 
 At ASAP7 (predictive 7 nm), an MXFP8 32-term block dot product gives 2.17× the throughput per mm² and 2.33× the MACs per joule of a BF16 8-term dot product and still trains within 1% of FP32; MXFP4 is 5.86× denser but misses the gate (+8.9% test loss). See [numerics results](docs/numerics-results.md).
 
+![Routed V2, V3, V4 and V6 cores at one scale](docs/img/layout-strip.png)
+
+*V2 to V6 routed SKY130HD cores at one scale ([layouts](docs/physical-flow.md#layouts)).*
+
 ## Why it matters
 
-Training accelerators win or lose on MAC arithmetic, operand reuse and memory bandwidth. This repo measures each one in real hardware: a tile that routes and meets timing, a cycle model that matches the RTL clock for clock, and a format study that weighs area and energy against training accuracy.
+Training accelerators win or lose on MAC arithmetic, operand reuse and memory bandwidth. This repo measures each: a tile that routes and meets timing, a cycle model matching RTL clock for clock, and a format study weighing area and energy against accuracy.
 
 ## Quick start
 
@@ -34,11 +38,9 @@ make layout-training-v4    # SKY130HD RTL-to-GDS; first run builds OpenROAD
 | `rtl/ppa/` | Registered harnesses for the ASAP7 numerics study |
 | `tb/` | Verilator testbenches and bit-exact C++ reference models |
 | `model/` | Cycle-level V4/V6 performance model |
-| `tools/` | Power, liberty and layout checks; numerics emulation; ORFS Bazel rules |
+| `tools/` | Power, layout and figure scripts; numerics emulation; ORFS Bazel rules |
 | `bin/` | `layout` and `ppa` flow drivers with pass/fail gates |
-| `constraints/` | SDC timing constraints |
 | `third_party/hardfloat/` | Berkeley HardFloat, unmodified and hash-checked |
-| `docs/` | Design notes, interfaces and results |
 
 ## Results and verification
 
@@ -48,15 +50,15 @@ make layout-training-v4    # SKY130HD RTL-to-GDS; first run builds OpenROAD
 | Fused dot-product tile (V6) | [design](docs/training-v6.md) | [interface](docs/training-v6-interface.md) | [results](docs/training-v6-results.md) |
 | Numerics study at ASAP7 | [method](docs/numerics-study.md) | — | [results](docs/numerics-results.md) |
 | Cycle-level performance model | [model](docs/tile-perf-model.md) | — | lane, buffer and port sweeps |
-| SKY130HD physical flow | [flow](docs/physical-flow.md) | [MAC8](docs/mac8.md) | MAC8 layout |
+| SKY130HD physical flow | [flow](docs/physical-flow.md) | [MAC8](docs/mac8.md) | [layouts](docs/physical-flow.md#layouts) |
 
 A guided [V4 walkthrough](docs/v4-hands-on.md) and a [learning path](docs/learning-path.md) cover the fundamentals.
 
 ## Limitations
 
 - Layouts are routed cores, not chips: no pad frame, ESD, foundry DRC/LVS or timing signoff.
-- ASAP7 is a predictive PDK. Its figures rank design points against each other, never as foundry numbers.
-- Power for the SKY130HD tiles is unmeasured; ASAP7 energy comes from zero-delay simulation and omits glitch power.
+- ASAP7 is predictive: its figures rank design points, never foundry numbers.
+- SKY130HD power is unmeasured; ASAP7 energy comes from zero-delay simulation without glitch power.
 - The training check is one dense layer (V4) and a 64-unit MLP (numerics study), not transformer scale.
 
 ## Related projects
