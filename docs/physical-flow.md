@@ -15,7 +15,7 @@ bazelisk run //chip-lab:mac8_final open_final
 
 `make layout` copies the GDS to `build/layout/mac8.gds`, the final timing report to `build/layout/timing.rpt`, and the router's DRC report to `build/layout/router_drc.rpt`. In the OpenROAD shell, use `report_checks -path_delay max` to examine a critical path. The tool checkout's `bazel-bin/chip-lab/` contains per-stage results and reports. Set `ORFS_TOOL_DIR` if the checkout lives elsewhere.
 
-Verified 2026-09-12 against code commit `bccbc7b`: the SKY130HD run used a 20 ns clock at the platform's typical 25 C, 1.8 V corner. Its final report showed 13.67 ns worst setup slack and 0.50 ns hold slack; detailed routing ended at zero router DRC errors and zero antenna violations. KLayout opened the 752,896-byte GDS as a 101.53 x 101.53 um `mac8` top cell. These are flow results under this lab's constraints, not independent signoff.
+Verified 2026-09-12: the SKY130HD run used a 20 ns clock at the platform's typical 25 C, 1.8 V corner. Its final report showed 13.67 ns worst setup slack and 0.50 ns hold slack; detailed routing ended at zero router DRC errors and zero antenna violations. KLayout opened the 752,896-byte GDS as a 101.53 x 101.53 um `mac8` top cell. These are flow results under this lab's constraints, not independent signoff.
 
 `bin/layout` rejects missing metrics, negative setup/hold slack, timing/electrical violations or a nonempty router DRC report. Antenna checks and foundry signoff remain separate.
 
