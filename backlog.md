@@ -1,11 +1,11 @@
 # Backlog
 
 ## In flight
-- [ ] numerics_ppa_asap7 - Rank BF16/FP8/MX/INT8 MAC datapaths by area, fmax, energy and training accuracy at ASAP7 (repo: openroad-chip-lab) (started 2026-10-19)
-  Plan: docs/numerics-study.md. Units verified: fp_dot8_fp32 (BF16, E4M3, E5M2; 4.2M vectors each), mx_dot32_fp32 (MXFP8, MXFP4; 2.1M correctly rounded vectors each), int8_dot8_int32. SKY130 synthesis estimates per MAC: BF16 FMA 28.3k um2, BF16 dot8 8.7k, MXFP8 4.5k, MXFP4 1.7k. Remaining: ASAP7 routed PPA (queued), activity-based energy, GEMM error and training emulation (M4).
 ## Queued
 - [ ] tile_perf_model - C++ cycle-level model of V4 and V6 in `model/`, matching RTL clock counts (32^3 GEMM: V4 4480, V6 2165); then sweep lanes, buffer depth and host port width (repo: openroad-chip-lab) (queued 2026-11-11)
 ## Done
+- [x] numerics_ppa_asap7 - Rank BF16/FP8/MX/INT8 MAC datapaths by area, fmax, energy and training accuracy at ASAP7 (repo: openroad-chip-lab) (done 2026-11-11)
+  docs/numerics-results.md. 11 routed points (plus BF16 frames 24-40), VCD-annotated energy, GEMM error, bit-exact training. MXFP8 ranks first among training-usable points (2.13x area, 2.32x energy vs BF16 dot8); MXFP4 fails the 1% loss gate; BF16 frame 24 is free. Tolerance was unset in the plan and fixed at 1%; per-tensor FP8 passes marginally (+0.85%).
 - [x] retire_old_tiles - Archive scalar FP32, V2, V3 and V5 tiles; keep V4, V6, MAC8 and numerics (repo: openroad-chip-lab) (done 2026-10-30)
   Copies in ~/projects/ARCHIVE/openroad-chip-lab-old-tiles-2026-10-30/; full state at tag archive/pre-cleanup-2026-10-30. Live contract text moved to docs/training-v4-interface.md and docs/training-v6-interface.md. V4 RTL/netlist 1833 jobs and V6 RTL 467 GEMMs match the pre-cleanup baseline line for line. Older Done entries keep their original doc paths; those docs are in the archive.
 - [x] training_tile_v6 - Fused BF16 dot-product tile behind the V5 scratchpad (repo: openroad-chip-lab) (done 2026-10-19)
