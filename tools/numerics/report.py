@@ -1,6 +1,6 @@
 """Print the numerics-study tables (docs/numerics-results.md) from routed metrics and accuracy runs.
 
-Reads build/ppa/<harness>/{metrics.json,power.txt} (make ppa-all) and build/numerics/
+Reads build/ppa/<harness>/{metrics.json,power.txt} (make ppa-all) and results/numerics/
 {gemm_error.txt,train_*.txt} (make numerics). ASAP7 figures are predictive: compare rows with each
 other, never with foundry data.
 
@@ -60,7 +60,7 @@ def ppa(harness, macs):
 
 def training():
     runs = {}
-    for path in sorted((ROOT / "build/numerics").glob("train_*.txt")):
+    for path in sorted((ROOT / "results/numerics").glob("train_*.txt")):
         for line in path.read_text().splitlines():
             f = line.split()
             if f[0] == "final":
@@ -79,7 +79,7 @@ def training():
 
 def gemm_errors():
     table = {}
-    for line in (ROOT / "build/numerics/gemm_error.txt").read_text().splitlines()[1:]:
+    for line in (ROOT / "results/numerics/gemm_error.txt").read_text().splitlines()[1:]:
         dist, k, path, median, p99 = line.split()
         table[(dist, int(k), path)] = (float(median), float(p99))
     return table

@@ -171,11 +171,11 @@ build/%: tools/numerics/%.cpp $(NUMERICS_DEPS)
 	mkdir -p build
 	g++ $(TRAINING_CFLAGS) -o $@ $<
 numerics: build/gemm_error build/train_mlp
-	mkdir -p build/numerics
-	./build/gemm_error > build/numerics/gemm_error.txt & \
-	printf '%s\n' $(TRAIN_RECIPES) | xargs -P 5 -I{} sh -c './build/train_mlp 3000 3 {} > build/numerics/train_{}.txt'; \
+	mkdir -p results/numerics
+	./build/gemm_error > results/numerics/gemm_error.txt & \
+	printf '%s\n' $(TRAIN_RECIPES) | xargs -P 5 -I{} sh -c './build/train_mlp 3000 3 {} > results/numerics/train_{}.txt'; \
 	wait
-	cat build/numerics/train_*.txt | grep '^final'
+	cat results/numerics/train_*.txt | grep '^final'
 
 # Cycle-level V4/V6 performance model: its BENCH lines must equal both RTL testbenches'
 # clock for clock; the sweep varies lanes/units, buffers/C banks and host port width.

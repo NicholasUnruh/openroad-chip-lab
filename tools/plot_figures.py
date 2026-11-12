@@ -7,7 +7,7 @@ Inputs (all under the main checkout's build/):
   renders/training_tile_v6/   tools/physical_views.sh
   renders/module_area.json    python3 tools/module_area.py <liberty>
   layout*/metrics.json        make layout, make layout-training*
-  numerics/train_*.txt        make numerics
+and results/numerics/train_*.txt (make numerics),
 and the ASAP7 tables in docs/numerics-results.md. --site also writes WebP copies and the
 figure data as JSON to <dir>.
 """
@@ -415,8 +415,10 @@ def numerics(site):
     train = report.training()
     fp32 = train["fp32"][0]
     points = []
-    for harness, _, recipe in report.POINTS:
+    for harness, _, recipes in report.POINTS:
         point = harness[4:]
+        # Plot the point's best recipe (e.g. with or without stochastic rounding).
+        recipe = min(recipes, key=lambda r: train[r][0]) if recipes else None
         row = {"point": point, "recipe": recipe, **ppa[point]}
         if recipe:
             row["test_loss"] = round(train[recipe][0], 4)
@@ -493,7 +495,7 @@ def numerics(site):
 
 def loss_curves(site):
     curves = {}
-    for path in sorted((BUILD / "numerics").glob("train_*.txt")):
+    for path in sorted((report.ROOT / "results/numerics").glob("train_*.txt")):
         for line in path.read_text().splitlines():
             f = line.split()
             if f[0] in ("curve", "final"):
