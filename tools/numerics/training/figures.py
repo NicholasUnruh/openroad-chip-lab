@@ -162,7 +162,7 @@ def throughput(runs: Path | None) -> None:
                 va="center", fontsize=8, color=MUTED)  # fmt: skip
     ax.set_yticks(range(len(names)), [LABEL[n] for n in names], fontsize=9)
     ax.invert_yaxis()
-    ax.set_xlabel("training tokens per second, GPT-2 124M, one RTX 4060", fontsize=9, color=MUTED)
+    ax.set_xlabel("training throughput (thousand tokens/s), GPT-2 124M, one RTX 4060", fontsize=9, color=MUTED)
     ax.set_xlim(0, max(rate) * 1.35)
     style(ax)
     ax.grid(False, axis="y")

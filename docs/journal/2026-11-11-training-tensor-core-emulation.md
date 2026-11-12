@@ -30,11 +30,11 @@ E3M2 needs two pieces (4 matmuls) and E4M3 three (9 matmuls). Each weight class 
 2. **Fused quantizer** (`kernel.pack`): one Triton pass per tensor computes the block amax, shared exponent, rounding and int8 pieces. It reads any strides, so the transposed operands of the backward GEMMs cost no copies. FP4/FP6 rose to 15–22 TFLOP/s.
 3. **Removing int64 from MXFP8**: int64 arithmetic and int64↔float conversions are slow on this GPU. The int32 carry normalization above replaced them and doubled MXFP8 to ~4.5 TFLOP/s.
 4. **NVFP4 in FP32**: the first NVFP4 quantizer divided in float64, which runs at 1/64 rate here. Switching to FP32 with IEEE-rounded division (`div_rn`; Triton's `/` is approximate) cut it about 2.5×. The C++ reference performs the same FP32 operations, so the definition changed in both places at once and the cross-check still passes.
-5. **End-to-end training throughput** at 64 sequences × 1,024 tokens per optimizer step. The first measurement, with 8 sequences per forward pass, gave BF16 11.7k tokens/s and every emulated format 4–6k. The profiler then showed the BF16 LM-head GEMM taking 360 ms, about 20× too long. Measured peak memory was 4.0–4.3 GB at 2 sequences per pass and 5.7–6.4 GB at 4 (BF16, MXFP4). Extrapolating that slope, 8 sequences need well over the card's 8 GB. The Windows display driver does not fail with out-of-memory; it pages GPU memory to system RAM, so the run was silently slow. With 4 sequences per pass (and 16 accumulation steps), BF16 doubled to 23.7k tokens/s.
+5. **End-to-end training throughput** at 64 sequences × 1,024 tokens per optimizer step. The first measurement, with 8 sequences per forward pass, gave BF16 11.7k tokens/s and every emulated format 4–6k. The profiler then showed the BF16 LM-head GEMM taking 360 ms, about 20× too long. Measured peak memory (BF16, MXFP4) is 4.0–4.3 GB at 2 sequences per pass, 5.7–6.4 GB at 4 and 9.2–10.8 GB at 8, more than the card's 8 GB. The Windows display driver does not fail with out-of-memory; it pages GPU memory to system RAM, so the run was silently slow. With 4 sequences per pass (and 16 accumulation steps), BF16 doubled to 24.2k tokens/s (12.2k at 8 sequences in the same probe).
 
 ## Output
 
-Training throughput per format (`train.py --max-steps 4 --micro 4`, mean of steps 2–4; `docs/journal/data/training-throughput.json`):
+Training throughput per format (`train.py --micro 4`, mean of the steps after the first, which includes compilation and autotuning; `docs/journal/data/training-throughput.json`):
 
 ![Training throughput per format](img/training-throughput.png)
 
@@ -76,7 +76,7 @@ nvfp4        mlp_proj       2.43      2.33     8.11
 
 ## Result
 
-Exact emulation costs 0.77× BF16's training speed for MXFP4 and MXFP6 E2M3, 0.65× for E3M2, 0.43× for NVFP4 and 0.34× for MXFP8. These ratios measure the emulator, not the formats: a native MXFP8 tensor core would be faster than BF16. The GPU kernel stays bit-exact against the C++ references: over 1,400 random cases (every format except E5M2), the GPU grid integers, block factors and 767k GEMM outputs all match with zero bit differences (`docs/journal/data/training-xcheck-gpu.txt`).
+Exact emulation costs 0.76× BF16's training speed for MXFP4 and MXFP6 E2M3, 0.63× for E3M2, 0.42× for NVFP4 and 0.33× for MXFP8. These ratios measure the emulator, not the formats: a native MXFP8 tensor core would be faster than BF16. The GPU kernel stays bit-exact against the C++ references: over 1,400 random cases (every format except E5M2), the GPU grid integers, block factors and 767k GEMM outputs all match with zero bit differences (`docs/journal/data/training-xcheck-gpu.txt`).
 
 Sizing: training every format on the same 300M tokens (4,577 steps of 65,536 tokens) takes about 3.5 h for BF16, 10.4 h for MXFP8, 4.6–5.4 h for each MXFP6 and MXFP4 run, and 8.2 h for NVFP4. That is about 37 GPU-hours for the six formats, leaving room inside three days for pauses and stochastic-rounding variants. 300M tokens is about 2.4 tokens per parameter, far below the ~20 of a compute-optimal run, so the comparison is between formats at equal budget, not a converged GPT-2.
 

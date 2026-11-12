@@ -1,38 +1,72 @@
 {
  "bf16": {
-  "tokens_per_s": 23711,
+  "tokens_per_s": 24173,
   "steps_averaged": 3,
   "micro_batch": 4,
-  "batch_tokens": 65536
+  "batch_tokens": 65536,
+  "peak_gb": 5.7
+ },
+ "bf16_micro2": {
+  "tokens_per_s": 23038,
+  "steps_averaged": 2,
+  "micro_batch": 2,
+  "batch_tokens": 65536,
+  "peak_gb": 3.98
+ },
+ "bf16_micro8": {
+  "tokens_per_s": 12246,
+  "steps_averaged": 2,
+  "micro_batch": 8,
+  "batch_tokens": 65536,
+  "peak_gb": 9.15
  },
  "mxfp4": {
-  "tokens_per_s": 18242,
+  "tokens_per_s": 18253,
   "steps_averaged": 3,
   "micro_batch": 4,
-  "batch_tokens": 65536
+  "batch_tokens": 65536,
+  "peak_gb": 6.43
+ },
+ "mxfp4_micro2": {
+  "tokens_per_s": 16953,
+  "steps_averaged": 2,
+  "micro_batch": 2,
+  "batch_tokens": 65536,
+  "peak_gb": 4.26
+ },
+ "mxfp4_micro8": {
+  "tokens_per_s": 5733,
+  "steps_averaged": 2,
+  "micro_batch": 8,
+  "batch_tokens": 65536,
+  "peak_gb": 10.77
  },
  "mxfp6_e2m3": {
-  "tokens_per_s": 18254,
+  "tokens_per_s": 18251,
   "steps_averaged": 3,
   "micro_batch": 4,
-  "batch_tokens": 65536
+  "batch_tokens": 65536,
+  "peak_gb": 6.43
  },
  "mxfp6_e3m2": {
-  "tokens_per_s": 15303,
+  "tokens_per_s": 15328,
   "steps_averaged": 3,
   "micro_batch": 4,
-  "batch_tokens": 65536
+  "batch_tokens": 65536,
+  "peak_gb": 6.43
  },
  "mxfp8": {
-  "tokens_per_s": 8031,
+  "tokens_per_s": 8016,
   "steps_averaged": 3,
   "micro_batch": 4,
-  "batch_tokens": 65536
+  "batch_tokens": 65536,
+  "peak_gb": 6.44
  },
  "nvfp4": {
-  "tokens_per_s": 10155,
+  "tokens_per_s": 10095,
   "steps_averaged": 3,
   "micro_batch": 4,
-  "batch_tokens": 65536
+  "batch_tokens": 65536,
+  "peak_gb": 6.43
  }
 }
