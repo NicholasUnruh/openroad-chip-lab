@@ -70,8 +70,9 @@ int main(int argc, char **argv) {
         GemmFn checked = [&](const Matrix &a, const Matrix &b, unsigned m, unsigned k, unsigned n) {
             Matrix got = tile_gemm(a, b, m, k, n), expected = study(a, b, m, k, n);
             for (size_t i = 0; i < got.size(); ++i)
-                require(got[i] == expected[i] || (std::isnan(got[i]) && std::isnan(expected[i])),
-                        "tile GEMM differs from the study datapath at element " + std::to_string(i));
+                require(
+                    got[i] == expected[i] || (std::isnan(got[i]) && std::isnan(expected[i])),
+                    "tile GEMM differs from the study datapath at element " + std::to_string(i));
             return got;
         };
         print_header();

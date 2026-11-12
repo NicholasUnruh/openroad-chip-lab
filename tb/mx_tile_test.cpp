@@ -62,7 +62,8 @@ static void shape_tests(Chip &chip) {
     std::cout << "PASS: " << count
               << " GEMM shapes (1-4 tiles of M and N, 1-4 K blocks, all that fit), exact and "
                  "scaled; "
-              << raw << " raw E4M3/E8M0 encoding GEMMs; wraparound bases; stalled and delayed drains\n";
+              << raw
+              << " raw E4M3/E8M0 encoding GEMMs; wraparound bases; stalled and delayed drains\n";
 }
 
 static void flag_tests(Chip &chip) {

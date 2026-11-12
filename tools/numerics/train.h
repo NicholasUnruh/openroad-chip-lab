@@ -88,8 +88,8 @@ struct Model {
 
 // Forward pass through the datapath; returns logits and fills hidden pre-activations and ReLU
 // output.
-inline Matrix forward(const Model &m, const Matrix &x, unsigned n, const GemmFn &gemm,
-                      Matrix &pre, Matrix &act) {
+inline Matrix forward(const Model &m, const Matrix &x, unsigned n, const GemmFn &gemm, Matrix &pre,
+                      Matrix &act) {
     pre = gemm(x, m.w1, n, in_dim, hidden);
     act = pre;
     for (unsigned s = 0; s < n; ++s)
@@ -121,7 +121,9 @@ inline double softmax_loss(const Matrix &logits, const std::vector<unsigned> &y,
     return loss / n;
 }
 
-inline void print_header() { std::cout << "kind recipe seed step train_loss test_loss test_accuracy\n"; }
+inline void print_header() {
+    std::cout << "kind recipe seed step train_loss test_loss test_accuracy\n";
+}
 
 inline void train(const Recipe &r, unsigned steps, unsigned seeds) {
     std::mt19937_64 teacher_rng(2026);

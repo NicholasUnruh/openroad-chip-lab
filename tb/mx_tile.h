@@ -118,7 +118,8 @@ class Chip {
     static void queue_bytes(Writes &out, const uint8_t *data, unsigned count, unsigned row) {
         for (unsigned i = 0; i < count; i += 4) {
             uint32_t word = 0;
-            for (unsigned b = 0; b < 4 && i + b < count; ++b) word |= uint32_t(data[i + b]) << 8 * b;
+            for (unsigned b = 0; b < 4 && i + b < count; ++b)
+                word |= uint32_t(data[i + b]) << 8 * b;
             out.emplace_back((4 * row + i / 4) & 0x3ffu, word);
         }
     }
