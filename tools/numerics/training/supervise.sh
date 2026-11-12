@@ -48,6 +48,6 @@ for ((chunk = 1; chunk <= MAX_CHUNKS; chunk++)); do
     failures[$name]=$(( ${failures[$name]:-0} + 1 ))
     log "$name failed with status $status (${failures[$name]} of $MAX_FAILURES)"
   fi
-  sleep 20  # the gap in which other jobs waiting on the GPU lock take it
+  sleep 60  # the gap in which other jobs waiting on the GPU lock take it
 done
 log "chunk limit reached"
