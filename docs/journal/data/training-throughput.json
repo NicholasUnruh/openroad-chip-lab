@@ -1,0 +1,38 @@
+{
+ "bf16": {
+  "tokens_per_s": 23711,
+  "steps_averaged": 3,
+  "micro_batch": 4,
+  "batch_tokens": 65536
+ },
+ "mxfp4": {
+  "tokens_per_s": 18242,
+  "steps_averaged": 3,
+  "micro_batch": 4,
+  "batch_tokens": 65536
+ },
+ "mxfp6_e2m3": {
+  "tokens_per_s": 18254,
+  "steps_averaged": 3,
+  "micro_batch": 4,
+  "batch_tokens": 65536
+ },
+ "mxfp6_e3m2": {
+  "tokens_per_s": 15303,
+  "steps_averaged": 3,
+  "micro_batch": 4,
+  "batch_tokens": 65536
+ },
+ "mxfp8": {
+  "tokens_per_s": 8031,
+  "steps_averaged": 3,
+  "micro_batch": 4,
+  "batch_tokens": 65536
+ },
+ "nvfp4": {
+  "tokens_per_s": 10155,
+  "steps_averaged": 3,
+  "micro_batch": 4,
+  "batch_tokens": 65536
+ }
+}
