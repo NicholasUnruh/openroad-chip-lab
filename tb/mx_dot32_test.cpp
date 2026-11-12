@@ -95,6 +95,19 @@ static Vector generate(std::mt19937 &rng, unsigned kind) {
     }
     v.sa = scale(rng, kind);
     v.sb = scale(rng, kind);
+    if (kind == 5) {
+        // Signed zeros: half the time every product is negative, so an exact zero must be -0.
+        // NVFP4 also zeroes one block's scale over nonzero elements half the time.
+        const uint8_t top = uint8_t(1u << (width - 1));
+        const bool negative = rng() % 2;
+        const int zero_block = nvfp4 && rng() % 2 ? int(rng() % 2) : -1;
+        for (unsigned k = 0; k < 32; ++k) {
+            if (int(k / 16) == zero_block) v.a[k] = finite(rng);
+            if (negative) v.b[k] = uint8_t((v.b[k] & ~top) | ((v.a[k] & top) ^ top));
+        }
+        if (zero_block >= 0)
+            v.sa = uint16_t((v.sa & ~(0xffu << 8 * zero_block)) | (rng() & 0x80u) << 8 * zero_block);
+    }
     switch (kind) {
         case 0:
             v.c = rng();

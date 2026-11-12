@@ -90,7 +90,10 @@ module mx_dot32_fp32 #(
                 if (a[W*k+W-1] ^ b[W*k+W-1]) neg_inf = 1'b1;
                 else pos_inf = 1'b1;
             end
-            all_zero = all_zero & (a_zero | b_zero);
+            // An NVFP4 lane is also a zero product when either of its block scales is zero.
+            all_zero = all_zero & (a_zero | b_zero |
+                       (NV && (k < 16 ? nv_sa[6:0] == 0 || nv_sb[6:0] == 0
+                                      : nv_sa[14:8] == 0 || nv_sb[14:8] == 0)));
             all_negative = all_negative & (a[W*k+W-1] ^ b[W*k+W-1]);
         end
     end
