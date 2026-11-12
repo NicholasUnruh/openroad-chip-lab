@@ -323,20 +323,28 @@ def unpack(p: Packed) -> torch.Tensor:
     return q
 
 
-# Count of GEMMs whose block scales left the exact FP32 range; the trainer checks it each step.
-range_errors = None
+# GEMMs computed by the float64 fallback because their block scales left the exact FP32 range.
+exact_fallbacks = 0
 
 
 def gemm_packed(a: Packed, b: Packed) -> torch.Tensor:
-    """C = A B^T for packed A [M, K], B [N, K]; matches mx.gemm_reference bit for bit."""
-    global range_errors
+    """C = A B^T for packed A [M, K], B [N, K]; matches mx.gemm_reference bit for bit.
+
+    The kernel's FP32 products by the block factors are exact while the smallest product LSB,
+    factor_a * factor_b, is at least 2^-149 (NVFP4 factors are at least 2^-10, so always). Very
+    small MX blocks (e.g. near-zero gradient blocks) can break that; such GEMMs run through
+    mx.gemm_reference in float64 on the GPU instead, which is exact at any scale.
+    """
+    global exact_fallbacks
     fmt = a.fmt
     _, m, k = a.pieces.shape
     n = b.pieces.shape[1]
     assert k % 32 == 0, "K must be a multiple of 32"
-    if not fmt.nvfp4:  # MX: the smallest result LSB, factor_a * factor_b, must be >= 2^-149
-        bad = (a.factor.min() * b.factor.min() < 2.0**-149).to(torch.int32)
-        range_errors = bad if range_errors is None else range_errors + bad
+    if not fmt.nvfp4 and a.factor.min().double() * b.factor.min().double() < 2.0**-149:
+        exact_fallbacks += 1
+        grid = 2.0**-fmt.element.grid
+        qa = mx.Quantized(unpack(a), a.factor * grid, 1.0, fmt)
+        return mx.gemm_reference(qa, mx.Quantized(unpack(b), b.factor * grid, 1.0, fmt))
     c = torch.empty(m, n, dtype=torch.float32, device=a.pieces.device)
     grid = lambda meta: (triton.cdiv(m, meta["BM"]), triton.cdiv(n, meta["BN"]))  # noqa: E731
     _gemm_kernel[grid](
