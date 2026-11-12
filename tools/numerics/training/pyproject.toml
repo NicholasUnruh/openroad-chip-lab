@@ -1,0 +1,30 @@
+[project]
+name = "mx-training"
+version = "0.1.0"
+description = "GPT-style training with GEMMs emulated bit-exactly to microscaled datapaths"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2.2", "matplotlib>=3.10", "tiktoken>=0.9", "pyarrow>=20"]
+
+[project.optional-dependencies]
+cpu = ["torch==2.15.0"]
+cuda = ["torch==2.15.0"]
+
+[tool.uv]
+package = false
+conflicts = [[{ extra = "cpu" }, { extra = "cuda" }]]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu132", extra = "cuda" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
