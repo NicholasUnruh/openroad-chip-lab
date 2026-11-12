@@ -31,7 +31,7 @@ python3 "$lab_dir/tools/liberty_cells.py" "$out_dir/cells.v" "$cell_lib"
 macro=
 [ "$design" = training_tile_v4 ] || macro="$lab_dir/tb/sky130_sram_1rw1r_128x256_8.v"
 # shellcheck disable=SC2086
-verilator --cc --exe --build -j 4 --trace --trace-depth 2 -Wno-fatal -Wno-lint -Wno-style \
+verilator --cc --exe --build -j 4 --trace --trace-depth 2 --trace-underscore -Wno-fatal -Wno-lint -Wno-style \
     --top-module "$design" --Mdir "$out_dir/sim" "$results/6_final.v" "$out_dir/cells.v" $macro \
     "$lab_dir/tb/$test.cpp" -CFLAGS "-std=c++17 -O1 -fno-fast-math -ffp-contract=off -I$lab_dir/tb" \
     > "$out_dir/verilator.log" 2>&1
