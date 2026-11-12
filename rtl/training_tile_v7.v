@@ -164,7 +164,7 @@ module training_tile_v7 (
         end
     end
     genvar g;
-    generate for (g = 0; g < 2; g = g + 1) begin: units
+    generate for (g = 0; g < 2; g = g + 1) begin: dot_units
         mx_dot32_fp32 #(.ELEM(0)) dot (
             .clk(clk), .a(a_row), .b(unit_b[256*g +: 256]), .scale_a(row_scale),
             .scale_b(unit_scale[8*g +: 8]), .c(unit_c[32*g +: 32]),

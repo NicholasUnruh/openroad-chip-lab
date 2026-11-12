@@ -1,10 +1,10 @@
 # Numerics study results
 
-Method: [numerics-study.md](numerics-study.md). Verified 2026-11-11. **ASAP7 is a predictive PDK: every figure below is only a comparison between design points, never a foundry number.**
+Method: [numerics-study.md](numerics-study.md). Verified 2026-11-12 (15 routed points). **ASAP7 is a predictive PDK: every figure below is only a comparison between design points, never a foundry number.**
 
 ## Answer
 
-Among datapaths that train within the tolerance, **MXFP8 32-term block dot products** give the most throughput per mm² (2.17× the BF16 dot8) and per joule (2.33×). Per-tensor FP8 dot8 units come next at about 1.5–1.6×. **MXFP4 is 5.9× denser but fails training** (+8.9% test loss). For BF16, the frame width is a free knob: narrowing the alignment frame from 32 to 24 bits saves 11% area and 8% energy, and lifts fmax above 1 GHz, with no measurable change in error or training. Chained FMAs cost 3.3× the dot8's energy per MAC and give 0.34× its throughput per mm².
+Among datapaths that train within the tolerance, **MXFP6 E2M3 32-term block dot products** give the most throughput per mm² (4.0× the BF16 dot8) and per joule (3.4×), and train at +0.64% test loss. **MXFP8 (E4M3)** is next at 1.9× and 2.3×, with more accuracy margin (+0.37%). Per-tensor FP8 dot8 units follow at about 1.4–1.5×. **MXFP4 is 5.7× denser but fails training** (+8.9%). NVFP4 fails too, even with stochastic rounding (+5.6%). MXFP6 E3M2 costs the same as E2M3 but fails (+2.1%): with a block scale, the extra mantissa bit matters more than exponent range. For BF16, the frame width is a free knob: narrowing the alignment frame from 32 to 24 bits saves 11% area and 6% energy, with no measurable change in error or training. Chained FMAs cost 3.3× the dot8's energy per MAC and give 0.32× its throughput per mm².
 
 ## Ranking
 
@@ -12,23 +12,29 @@ Throughput per mm² uses the routed fmax; energy uses simulated activity at 1 GH
 
 | Rank | Point | Trains | GMAC/s/mm² | × dot8_bf16 | MAC/nJ | × dot8_bf16 |
 | ---: | --- | --- | ---: | ---: | ---: | ---: |
-| 1 | `dot32_mxfp8` | yes | 11,578 | 2.17 | 2,406 | 2.33 |
-| 2 | `dot8_e4m3` | yes (FP8 recipe) | 8,783 | 1.64 | 1,509 | 1.46 |
-| 3 | `dot8_e5m2` | yes (FP8 recipe) | 8,287 | 1.55 | 1,566 | 1.51 |
-| 4 | `dot8_bf16_f24` | yes | 6,930 | 1.30 | 1,125 | 1.09 |
-| 5 | `dot8_bf16_f28` | yes | 6,629 | 1.24 | 1,074 | 1.04 |
-| 6 | `dot8_bf16` (frame 32, V6 unit) | yes | 5,347 | 1.00 | 1,034 | 1.00 |
-| 7 | `dot8_bf16_f36` | yes | 5,137 | 0.96 | 1,001 | 0.97 |
-| 8 | `dot8_bf16_f40` | yes | 5,097 | 0.95 | 979 | 0.95 |
-| 9 | `fma_bf16` | yes | 1,800 | 0.34 | 313 | 0.30 |
-| — | `dot32_mxfp4` | no | 31,348 | 5.86 | 4,992 | 4.83 |
-| — | `dot8_int8` | inference only | 26,476 | 4.95 | 2,974 | 2.88 |
+| 1 | `dot32_mxfp6_e2m3` | yes | 22,415 | 4.01 | 3,516 | 3.40 |
+| 2 | `dot32_mxfp8` | yes | 10,589 | 1.90 | 2,406 | 2.33 |
+| 3 | `dot8_e4m3` | yes (FP8 recipe) | 8,571 | 1.53 | 1,507 | 1.46 |
+| 4 | `dot8_e5m2` | yes (FP8 recipe) | 8,010 | 1.43 | 1,581 | 1.53 |
+| 5 | `dot32_mxfp8_e5m2` | yes (E5M2 gradients) | 7,636 | 1.37 | 2,162 | 2.09 |
+| 6 | `dot8_bf16_f24` | yes | 6,277 | 1.12 | 1,100 | 1.06 |
+| 7 | `dot8_bf16_f28` | yes | 5,793 | 1.04 | 1,061 | 1.03 |
+| 8 | `dot8_bf16` (frame 32, V6 unit) | yes | 5,588 | 1.00 | 1,034 | 1.00 |
+| 9 | `dot8_bf16_f36` | yes | 4,865 | 0.87 | 1,005 | 0.97 |
+| 10 | `dot8_bf16_f40` | yes | 4,743 | 0.85 | 965 | 0.93 |
+| 11 | `fma_bf16` | yes | 1,782 | 0.32 | 313 | 0.30 |
+| — | `dot32_mxfp4` | no (with or without SR) | 31,834 | 5.70 | 5,024 | 4.86 |
+| — | `dot8_int8` | inference only | 26,973 | 4.83 | 2,985 | 2.89 |
+| — | `dot32_mxfp6_e3m2` | no | 21,241 | 3.80 | 3,505 | 3.39 |
+| — | `dot32_nvfp4` | no (with or without SR) | 17,275 | 3.09 | 3,941 | 3.81 |
 
 ![Throughput per mm² and MACs per nJ against final test loss relative to FP32, with the 1% gate](img/numerics-pareto.png)
 
-*Each datapath's density and energy against its training loss; only points left of the 1% gate count. MXFP8 is the best point that passes; MXFP4 is far denser but lands at +8.9%.*
+*Each datapath's density and energy against its training loss; only points left of the 1% gate count. MXFP6 E2M3 is the best point that passes; MXFP4 is far denser but lands at +8.9%.*
 
-E4M3 and E5M2 are one recipe (E4M3 forward, E5M2 gradients), so a training chip needs both or a unit that handles both.
+E4M3 and E5M2 are one recipe (E4M3 forward, E5M2 gradients), so a training chip needs both or a unit that handles both. The `dot32_mxfp8_e5m2` row is the E5M2 unit scored with the MXFP8 recipe that uses E5M2 for gradients; its wider exponent widens the exact fixed-point product from 36 to 66 bits (`FIXW` in `rtl/mx_dot32_fp32.v`), and the unit is 44% larger than E4M3's. The same width explains the MXFP6 pair: E2M3 products need 12 bits, E3M2 products 18.
+
+MXFP6 E2M3 passes the gate with less margin than MXFP8 (+0.64% against +0.37%, three seeds each, seed spread 0.002–0.005), so on this model it is the better silicon choice and the riskier numerics choice.
 
 ## Area, fmax and energy
 
@@ -36,21 +42,27 @@ Each unit is routed behind registered inputs in a fixed harness, with a 1 GHz ta
 
 | Point | MACs/clk | Area µm² | Area/MAC µm² | fmax MHz | Power at 1 GHz mW | Energy fJ/MAC |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `fma_bf16` | 1 | 579 | 579 | 1042 | 3.19 | 3190 |
-| `dot8_bf16` | 8 | 1319 | 165 | 882 | 7.74 | 968 |
-| `dot8_bf16_f24` | 8 | 1170 | 146 | 1014 | 7.11 | 889 |
-| `dot8_bf16_f28` | 8 | 1236 | 155 | 1024 | 7.45 | 931 |
-| `dot8_bf16_f36` | 8 | 1402 | 175 | 900 | 7.99 | 999 |
-| `dot8_bf16_f40` | 8 | 1448 | 181 | 923 | 8.17 | 1021 |
-| `dot8_e4m3` | 8 | 938 | 117 | 1030 | 5.30 | 662 |
-| `dot8_e5m2` | 8 | 932 | 116 | 965 | 5.11 | 639 |
-| `dot32_mxfp8` | 32 | 2753 | 86 | 996 | 13.30 | 416 |
-| `dot32_mxfp4` | 32 | 1053 | 33 | 1032 | 6.41 | 200 |
-| `dot8_int8` | 8 | 435 | 54 | 1441 | 2.69 | 336 |
+| `fma_bf16` | 1 | 586 | 586 | 1045 | 3.19 | 3190 |
+| `dot8_bf16` | 8 | 1328 | 166 | 928 | 7.74 | 968 |
+| `dot8_bf16_f24` | 8 | 1182 | 148 | 927 | 7.27 | 909 |
+| `dot8_bf16_f28` | 8 | 1273 | 159 | 922 | 7.54 | 943 |
+| `dot8_bf16_f36` | 8 | 1404 | 176 | 854 | 7.96 | 995 |
+| `dot8_bf16_f40` | 8 | 1475 | 184 | 874 | 8.29 | 1036 |
+| `dot8_e4m3` | 8 | 939 | 117 | 1006 | 5.31 | 664 |
+| `dot8_e5m2` | 8 | 926 | 116 | 927 | 5.06 | 633 |
+| `dot32_mxfp8` | 32 | 2735 | 85 | 905 | 13.30 | 416 |
+| `dot32_mxfp8_e5m2` | 32 | 3933 | 123 | 938 | 14.80 | 462 |
+| `dot32_mxfp6_e3m2` | 32 | 1578 | 49 | 1047 | 9.13 | 285 |
+| `dot32_mxfp6_e2m3` | 32 | 1486 | 46 | 1041 | 9.10 | 284 |
+| `dot32_mxfp4` | 32 | 1045 | 33 | 1040 | 6.37 | 199 |
+| `dot32_nvfp4` | 32 | 1536 | 48 | 829 | 8.12 | 254 |
+| `dot8_int8` | 8 | 435 | 54 | 1468 | 2.69 | 335 |
 
-All 11 routes pass hold, slew, capacitance, fanout and router DRC. Setup slack is the fmax measurement, not a gate. fmax does not change monotonically with frame width (32: 882, 36: 900, 40: 923 MHz), and a functionally identical earlier netlist of each `fp_dot8` point routed up to 4% different in fmax and area, so differences under about 5% between neighbouring points are placement and repair noise.
+All 15 routes pass hold, slew, capacitance, fanout and router DRC. Setup slack is the fmax measurement, not a gate. **fmax is the noisy column.** Re-routing the unchanged BF16 points moved fmax by up to 9% (`dot8_bf16_f24`: 1014 → 927 MHz; `dot8_bf16`: 882 → 928 MHz) while area and energy stayed within 3%. MXFP8's 2.17× of the previous route is 1.90× here for the same reason (996 → 905 MHz, area 2753 → 2735 µm², energy unchanged). Throughput ratios are therefore good to about ±10%; area and energy ratios to a few percent. The E2M3-over-MXFP8 gap (2.1× in throughput per mm², 1.5× in energy) is far outside that noise.
 
-**Energy method.** Each routed netlist is simulated with zero-delay cell models generated from the ASAP7 Liberty functions. Stimulus is 2,000 clocks of N(0, 1) operands quantized to the point's format, with N(0, 16) FP32 accumulator inputs. The routed outputs must match the Yosys netlist bit for bit after warm-up, and they do for all 11 points. OpenSTA reads the VCD (100% of pins annotated) and extracted SPEF, then reports power. The earlier probabilistic input-activity method put `fma_bf16` at 17.7 mW, 5.5× the simulated value, because it propagates toggles through the deep arithmetic logic without correlation. Zero-delay simulation leaves out glitch power, so absolute energies are low by an unknown factor; the comparison assumes it is similar across points.
+NVFP4 costs more than MXFP4 for the same E2M1 elements because each 16-element block sum is multiplied by the product of its two E4M3 scale significands (8 bits) before the two blocks are aligned, where MX applies a power-of-two scale as an exponent add. It is also the slowest point (829 MHz).
+
+**Energy method.** Each routed netlist is simulated with zero-delay cell models generated from the ASAP7 Liberty functions. Stimulus is 2,000 clocks of N(0, 1) operands quantized to the point's format, with N(0, 16) FP32 accumulator inputs. The routed outputs must match the Yosys netlist bit for bit after warm-up, and they do for all 15 points. OpenSTA reads the VCD (100% of pins annotated) and extracted SPEF, then reports power. The earlier probabilistic input-activity method put `fma_bf16` at 17.7 mW, 5.5× the simulated value, because it propagates toggles through the deep arithmetic logic without correlation. Zero-delay simulation leaves out glitch power, so absolute energies are low by an unknown factor; the comparison assumes it is similar across points.
 
 ## GEMM error
 
@@ -62,11 +74,15 @@ Median / p99 of |y − y₆₄| / Σ|aᵢbᵢ| over 2,000 dot products per cell.
 | `e4m3_tensor` | 6.2e-4 / 2.3e-3 | 8.2e-4 / 3.1e-3 | 3.0e-3 / 1.1e-2 | 6.2e-4 / 2.4e-3 |
 | `e5m2_tensor` | 1.2e-3 / 4.6e-3 | 1.6e-3 / 6.0e-3 | 6.0e-3 / 2.4e-2 | 1.2e-3 / 4.7e-3 |
 | `mxfp8` | 7.0e-4 / 2.6e-3 | 9.8e-4 / 3.7e-3 | 3.8e-3 / 1.6e-2 | 7.1e-4 / 2.8e-3 |
+| `mxfp8_e5m2` | 1.2e-3 / 5.0e-3 | 1.7e-3 / 6.4e-3 | 6.3e-3 / 2.5e-2 | 1.3e-3 / 5.0e-3 |
+| `mxfp6_e2m3` | 6.7e-4 / 2.6e-3 | 9.3e-4 / 3.5e-3 | 4.0e-3 / 1.6e-2 | 6.5e-4 / 2.6e-3 |
+| `mxfp6_e3m2` | 1.2e-3 / 5.0e-3 | 1.7e-3 / 6.4e-3 | 6.4e-3 / 2.5e-2 | 1.3e-3 / 5.0e-3 |
+| `nvfp4` | 2.3e-3 / 8.1e-3 | 2.8e-3 / 1.1e-2 | 9.0e-3 / 3.2e-2 | 2.2e-3 / 8.8e-3 |
 | `mxfp4` | 2.6e-3 / 1.1e-2 | 3.8e-3 / 1.5e-2 | 1.4e-2 / 5.7e-2 | 2.6e-3 / 9.7e-3 |
 | `int8_tensor` | 2.8e-4 / 1.0e-3 | 7.7e-4 / 2.8e-3 | 7.2e-3 / 2.9e-2 | 1.3e-2 / 5.9e-2 |
 | `int8_row` | 2.1e-4 / 7.9e-4 | 4.3e-4 / 1.6e-3 | 4.8e-3 / 2.0e-2 | 2.0e-4 / 7.9e-4 |
 
-K=256 behaves the same way; the full table is in `results/numerics/gemm_error.txt`. Per-tensor INT8 collapses on row-scaled data (activations whose magnitude varies by token); MX block scaling does not.
+K=256 behaves the same way; the full table is in `results/numerics/gemm_error.txt`. Per-tensor INT8 collapses on row-scaled data (activations whose magnitude varies by token); MX block scaling does not. Once a block scale exists, error tracks mantissa bits: E2M3 (3 bits) matches E4M3, and E3M2 matches E5M2 (2 bits).
 
 ## Training emulation
 
@@ -79,8 +95,14 @@ A 64-64-10 ReLU student learns a fixed random teacher. Every forward, dW and dX 
 | BF16 dot8, frames 24–40 | 0.8147–0.8149 | ≤0.0029 | 0.697–0.699 | yes |
 | FP8 per-tensor (E4M3 / E5M2) | 0.8214 | 0.0055 | 0.694 | yes (+0.85%) |
 | MXFP8 | 0.8176 | 0.0051 | 0.696 | yes (+0.38%) |
+| MXFP8 / MXFP8 E5M2 gradients | 0.8193 | 0.0025 | 0.695 | yes (+0.58%) |
+| MXFP6 E2M3 | 0.8198 | 0.0020 | 0.696 | yes (+0.64%) |
+| MXFP6 E3M2 | 0.8317 | 0.0011 | 0.693 | no (+2.1%) |
+| NVFP4, stochastic rounding on gradients | 0.8601 | 0.0093 | 0.675 | no (+5.6%) |
 | MXFP4 / MXFP8 | 0.8860 | 0.0091 | 0.672 | no (+8.8%) |
 | MXFP4 | 0.8867 | 0.0094 | 0.669 | no (+8.9%) |
+| NVFP4 | 0.9558 | 0.0201 | 0.653 | no (+17%) |
+| MXFP4, stochastic rounding on gradients | 4.4396 | 1.1021 | 0.528 | no (diverges) |
 
 Loss curves (10 points per run) are in `results/numerics/train_*.txt`; `tools/plot_figures.py` draws them below.
 
@@ -101,7 +123,7 @@ Loss curves (10 points per run) are in `results/numerics/train_*.txt`; `tools/pl
 
 ```sh
 make sim-dot8 sim-mx sim-int8-dot8   # unit correctness, all formats and frames
-make ppa-all                          # 11 routes (about 30 min at ORFS_JOBS=6), then power
+make ppa-all                          # 15 routes, then power (about 1 h at ORFS_JOBS=6)
 make numerics                         # GEMM error and training emulation (about 20 min)
 python3 tools/numerics/report.py      # every table above
 ```

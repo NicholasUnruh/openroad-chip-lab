@@ -1,6 +1,7 @@
 #!/bin/sh
-# Route ASAP7 PPA harnesses through ORFS in one Bazel build and keep their final metrics
-# (docs/numerics-study.md). Setup slack is the fmax measurement, so only hold, electrical and
+# Route PPA harnesses through ORFS in one Bazel build and keep their final metrics
+# (docs/numerics-study.md). PPA_PDK=sky130hd routes the harnesses that have a sky130_ flow in
+# tools/orfs/BUILD.bazel instead of ASAP7, into build/ppa-sky130hd/. Setup slack is the fmax measurement, so only hold, electrical and
 # router checks gate the result.
 set -eu
 
@@ -13,6 +14,12 @@ if [ "$#" -eq 0 ] || [ "$1" = --help ]; then
 fi
 
 lab_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+pdk=${PPA_PDK:-asap7}
+case "$pdk" in
+    asap7) prefix= out="$lab_dir/build/ppa" ;;
+    sky130hd) prefix=sky130_ out="$lab_dir/build/ppa-sky130hd" ;;
+    *) printf 'error: PPA_PDK must be asap7 or sky130hd\n'; exit 2 ;;
+esac
 tool_dir=${ORFS_TOOL_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/openroad-chip-lab/bazel-orfs}
 [ -d "$tool_dir/chip-lab" ] || { printf 'error: tool checkout missing\nhelp: run make layout once to create it\n'; exit 1; }
 
@@ -24,16 +31,16 @@ for design in "$@"; do
     esac
     netlist="$lab_dir/build/ppa/$design.v"
     [ -s "$netlist" ] || { printf 'error: %s is missing\nhelp: run make ppa PPA_TOP=%s\n' "$netlist" "$design"; exit 1; }
-    for filename in "$design.v" ppa_asap7.sdc BUILD.bazel; do
+    for filename in "$design.v" "ppa_$pdk.sdc" BUILD.bazel; do
         if [ -L "$tool_dir/chip-lab/$filename" ]; then
             printf '%s\n' "Refusing to overwrite symlink: $tool_dir/chip-lab/$filename" >&2
             exit 1
         fi
     done
     cp "$netlist" "$tool_dir/chip-lab/$design.v"
-    targets="$targets //chip-lab:${design}_final"
+    targets="$targets //chip-lab:${prefix}${design}_final"
 done
-cp "$lab_dir/constraints/ppa_asap7.sdc" "$lab_dir/tools/orfs/BUILD.bazel" "$tool_dir/chip-lab/"
+cp "$lab_dir/constraints/ppa_$pdk.sdc" "$lab_dir/tools/orfs/BUILD.bazel" "$tool_dir/chip-lab/"
 
 cd "$tool_dir"
 # shellcheck disable=SC2086
@@ -41,11 +48,11 @@ bazelisk build $targets --jobs="${ORFS_JOBS:-4}"
 
 base="$tool_dir/bazel-bin/chip-lab"
 for design in "$@"; do
-    output_dir="$lab_dir/build/ppa/$design"
+    output_dir="$out/$design"
     mkdir -p "$output_dir"
-    install -m 0644 "$base/logs/asap7/$design/base/6_report.json" "$output_dir/metrics.json"
-    install -m 0644 "$base/reports/asap7/$design/base/6_finish.rpt" "$output_dir/timing.rpt"
-    install -m 0644 "$base/reports/asap7/$design/base/5_route_drc.rpt" "$output_dir/router_drc.rpt"
+    install -m 0644 "$base/logs/$pdk/$design/base/6_report.json" "$output_dir/metrics.json"
+    install -m 0644 "$base/reports/$pdk/$design/base/6_finish.rpt" "$output_dir/timing.rpt"
+    install -m 0644 "$base/reports/$pdk/$design/base/5_route_drc.rpt" "$output_dir/router_drc.rpt"
     python3 "$lab_dir/tools/check_layout.py" --fmax "$output_dir"
     printf 'metrics: %s\n' "$output_dir/metrics.json"
 done
