@@ -93,8 +93,8 @@ A 64-64-10 ReLU student learns a fixed random teacher. Every forward, dW and dX 
 | FP32 | 0.8145 | 0.0027 | 0.698 | — |
 | BF16 FMA | 0.8146 | 0.0024 | 0.697 | yes |
 | BF16 dot8, frames 24–40 | 0.8147–0.8149 | ≤0.0029 | 0.697–0.699 | yes |
-| FP8 per-tensor (E4M3 / E5M2) | 0.8214 | 0.0055 | 0.694 | yes (+0.85%) |
-| MXFP8 | 0.8176 | 0.0051 | 0.696 | yes (+0.38%) |
+| FP8 per-tensor (E4M3 / E5M2) | 0.8214 | 0.0055 | 0.694 | yes (+0.84%) |
+| MXFP8 | 0.8176 | 0.0051 | 0.696 | yes (+0.37%) |
 | MXFP8 / MXFP8 E5M2 gradients | 0.8193 | 0.0025 | 0.695 | yes (+0.58%) |
 | MXFP6 E2M3 | 0.8198 | 0.0020 | 0.696 | yes (+0.64%) |
 | MXFP6 E3M2 | 0.8317 | 0.0011 | 0.693 | no (+2.1%) |
@@ -112,7 +112,7 @@ Loss curves (10 points per run) are in `results/numerics/train_*.txt`; `tools/pl
 
 ## Choices and limitations
 
-- **Tolerance (gate).** The gate is 1% of FP32's mean final test loss, about 3× FP32's seed spread. Per-tensor FP8 passes at +0.85%, so it is marginal: a 0.75% gate would fail it, while MXFP8 passes either way.
+- **Tolerance (gate).** The gate is 1% of FP32's mean final test loss, about 3× FP32's seed spread. Per-tensor FP8 passes at +0.84%, so it is marginal: a 0.75% gate would fail it, while MXFP8 passes either way.
 - **Fresh batches.** Reusing a fixed 4,096-sample set for about 47 epochs overfits (train loss 0.06 against test loss 2.3), so overfitting rather than arithmetic would decide the ranking. Each step therefore draws a fresh batch and the learning rate decays.
 - **Optimistic FP8 scaling.** Per-tensor FP8 scales each tensor from its own current amax (just-in-time). Delayed scaling, which production recipes use, is likely worse.
 - **Small model.** A 64-unit MLP is far from transformer training. The training result only orders the formats and should not be read as a prediction at scale.

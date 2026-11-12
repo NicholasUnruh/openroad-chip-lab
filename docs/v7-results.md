@@ -37,7 +37,7 @@ The 32³ GEMM is host-bound in both tiles: V7 moves half the operand bytes (E4M3
 | Run | Seed 0 | Seed 1 | Seed 2 | Mean test loss | vs FP32 |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | FP32 | 0.81302 | 0.81226 | 0.81830 | 0.81452 | — |
-| MXFP8, C++ study datapath | 0.81384 | 0.81414 | 0.82475 | 0.81758 | +0.38% |
-| MXFP8, V7 RTL | 0.81384 | 0.81414 | 0.82475 | 0.81758 | +0.38% |
+| MXFP8, C++ study datapath | 0.81384 | 0.81414 | 0.82475 | 0.81758 | +0.37% |
+| MXFP8, V7 RTL | 0.81384 | 0.81414 | 0.82475 | 0.81758 | +0.37% |
 
-188,448 tile GEMMs (306,971,137 simulated clocks), all bit-exact against the study datapath, so the RTL's loss curve is the study's to the last bit and the tile passes the 1% gate. Results: `results/v7/train_*.txt`; figure: `tools/journal/v7_training_plot.py`.
+188,448 tile GEMMs (306,971,137 simulated clocks), all bit-exact against the study datapath, so the RTL's loss curve is the study's to the last bit and the tile passes the 1% gate. This is the same experiment, seeds and MXFP8 row as the numerics study; the percentage is computed from the unrounded means. Results: `results/v7/train_*.txt`; figure: `tools/journal/v7_training_plot.py`.
