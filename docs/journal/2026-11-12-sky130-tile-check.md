@@ -33,7 +33,7 @@ The script now fails any run with more than 1% of its logic pins unannotated.
 | --- | ---: | ---: |
 | ASAP7 unit (prediction) | 1.94× | 2.33× |
 | SKY130HD unit | 2.06× | 2.12× |
-| SKY130HD tile, V7 vs V6 | 1.75× peak MACs/clock/mm² | 1.59× pipelined, 1.16× 32³ GEMM |
+| SKY130HD tile, V7 vs V6 | 1.76× peak MACs/clock/mm² | 1.59× pipelined, 1.16× 32³ GEMM |
 
 | Tile power at 40 MHz, mW | V6 pipelined | V7 pipelined |
 | --- | ---: | ---: |
@@ -45,12 +45,12 @@ The script now fails any run with more than 1% of its logic pins unannotated.
 
 ![MXFP8 gain over BF16 at each level of measurement](img/sky130-check.png)
 
-What to notice: the first two pairs of bars are nearly equal, so the PDK change barely moves the result. The energy bar collapses only at the tile, and collapses most on the host-bound 32³ GEMM, where the units sit idle most of the time.
+What to notice (the tile's area bar is peak MACs per clock per mm² with the SRAM macro counted, so it does not depend on the benchmark): the first two pairs of bars are nearly equal, so the PDK change barely moves the result. The energy bar collapses only at the tile, and collapses most on the host-bound 32³ GEMM, where the units sit idle most of the time.
 
 ## Result
 
 - **The ranking holds across PDKs.** In SKY130HD the units keep the study's order (BF16, MXFP8, MXFP6 E2M3), and every area and energy ratio agrees with ASAP7 within 11%. The format study is a sound way to choose an element type.
-- **The area gain mostly survives into the tile.** V7 doubles V6's peak MACs per clock for 27% more standard-cell area, 1.75× the peak density with the SRAM macro counted. V7's two MXFP8 units are smaller than V6's four BF16 units; the growth is operand registers.
+- **The area gain mostly survives into the tile.** V7 doubles V6's peak MACs per clock for 27% more standard-cell area, 1.76× the peak density with the SRAM macro counted. V7's two MXFP8 units are smaller than V6's four BF16 units; the growth is operand registers.
 - **The energy gain does not survive.** In V6 and V7, flops and the clock tree draw 70% of the power, and combinational logic 8–12%, every clock whether the units are busy or not. Tile power is nearly constant per clock, so energy per MAC follows utilization: V7 saves 1.59× when it is kept busy and 1.16× on a host-bound GEMM. The study overstated the tile-level energy gain by 1.5–2×.
 - **So the prediction is confirmed for ranking and area, refuted for energy.** A format study that scores bare units answers "which format", not "how much energy will the chip save". The second question needs the registers and the clock tree in the model.
 

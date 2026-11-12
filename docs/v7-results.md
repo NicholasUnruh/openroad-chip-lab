@@ -55,9 +55,9 @@ V7 uses V6's flow, 25 ns clock, SRAM macro placement and power grid. Only the di
 | Setup / hold slack, ns | +5.06 / +0.17 | +5.03 / +0.26 |
 | fmax, MHz | 50.2 | 50.1 |
 | Router DRC, electrical violations | 0, 0 | 0, 0 |
-| Peak MACs/clock/mm², cells + macro | 21.5 | 37.7 (1.75×) |
+| Peak MACs/clock/mm², cells + macro | 21.5 | 37.7 (1.76×) |
 | Peak MACs/clock/mm², cells only | 41.7 | 65.7 (1.57×) |
-| 32³ GEMM MACs/clock/mm², cells + macro | 10.1 | 12.0 (1.19×) |
+| 32³ GEMM MACs/clock/mm², cells + macro | 10.1 | 12.0 (1.18×) |
 
 Both tiles close timing with the same 5 ns margin, and both critical paths are one pipeline stage inside a dot unit (V6 `p_s1` → `p_s2`, V7 `c_s2` → `c_s3`; `timing.rpt` from the flow). V7 doubles the peak MACs per clock for 27% more standard-cell area. Most of that growth is registers, not arithmetic: flops grow from 12,148 to 14,864, and their area grows by 98k µm². V7's two MXFP8 units (273k µm² before placement) are smaller than V6's four BF16 dot units (284k µm²). The tile logic around them grows by 153k µm², because V7 holds 4,352 more operand-register bits ([area by module](physical-flow.md)).
 
@@ -96,7 +96,7 @@ The numerics study ranked formats on routed ASAP7 units ([format cost](journal/2
 
 | Tile claim | ASAP7 unit prediction | SKY130 tile measurement |
 | --- | ---: | ---: |
-| MXFP8 vs BF16, throughput per area | 1.90× | 1.75× peak (cells + macro), 1.57× (cells only) |
+| MXFP8 vs BF16, throughput per area | 1.90× | 1.76× peak (cells + macro), 1.57× (cells only) |
 | MXFP8 vs BF16, energy per MAC | 2.33× | 1.16× (32³ GEMM), 1.59× (pipelined) |
 
 **The ranking holds and the unit ratios transfer.** Every unit ratio agrees across PDKs within 11%, so the ASAP7 study's ordering of BF16, MXFP8 and MXFP6 E2M3 survives a real PDK. All three SKY130 units close at about 100 MHz, because the 10 ns target, not the logic, sets fmax. Their throughput ratios therefore reduce to the area ratios.
