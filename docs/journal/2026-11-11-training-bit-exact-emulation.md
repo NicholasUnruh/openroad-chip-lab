@@ -4,6 +4,8 @@
 
 Can a PyTorch training run use exactly the arithmetic of the chip lab's block dot-product units, bit for bit, so that any accuracy loss measured in training is the format's and not the emulator's?
 
+> **Emulation scope (applies to every training-* result).** Only the GEMMs of the transformer-block Linear layers (attention QKV and output projections, both MLP layers) run in the low-precision format, in the forward pass and both backward GEMMs. The attention products QKᵀ and AV, the embeddings and the tied LM head stay in BF16, following the NVFP4 training recipe of arXiv 2509.25149. Results are therefore *not* full-network low-precision training.
+
 ## Concept
 
 **Small floating-point formats.** An element format ExMy has a sign, x exponent bits and y mantissa bits. The stored exponent field e is offset by a *bias* of 2^(x−1) − 1, so a normal value is (−1)^s · 1.m · 2^(e − bias). For E4M3 the bias is 7: field 1 is 2^−6 and field 15 is 2^8. E4M3 gives up infinity to reach 448 = 1.75 · 2^8. Field 0 holds subnormals, 0.m · 2^(1 − bias), which reach down to 2^−9 for E4M3.
