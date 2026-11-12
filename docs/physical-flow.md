@@ -38,9 +38,9 @@ For an eventual shared-shuttle test chip, [Tiny Tapeout's local hardening guide]
 | V3 | Four lanes with BF16 operands, FP32 accumulation | 815.31 | 251,834 | 66.74 |
 | V4 | Eight BF16 lanes, banked 8×8 operands | 1,358.125 | 716,253 | 57.12 |
 | V5 | SRAM scratchpad and GEMM sequencer in front of V4 (retired, no GDS kept) | — | — | — |
-| V6 | Four fused 8-term dot products behind the scratchpad | 1,700 | 749,555 | 45.04 |
+| V6 | Four fused 8-term dot products behind the scratchpad | 1,700 | 766,541 | 50.16 |
 
-Values come from each tile's `build/layout*/metrics.json`; fmax is the flow's timing estimate, not a retargeted build. V1 and V2 used different clock targets from V3 onward. Per-version renders: `docs/img/layout-{v1,v2,v3,v4,v6,mac8}.png`.
+Values come from each tile's `build/layout*/metrics.json`; fmax is the flow's timing estimate, not a retargeted build. V1 and V2 used different clock targets from V3 onward. Per-version renders: `docs/img/layout-{v1,v2,v3,v4,v6,mac8}.png`. The V6 images on this page come from its 2026-10-19 route, before the dot-product pipeline stages; the table has the 2026-11-12 re-route.
 
 ![30 × 20 µm of placed V6 standard cells and routing](img/layout-zoom-v6.png)
 
@@ -52,7 +52,7 @@ Values come from each tile's `build/layout*/metrics.json`; fmax is the flow's ti
 
 ![Setup and hold slack of every V6 timing endpoint](img/v6-slack-histogram.png)
 
-*Setup and hold slack of all 19,390 V6 endpoints from OpenSTA on the final netlist and SPEF; worst setup +2.80 ns and hold +0.24 ns match the flow's metrics. V4's endpoint reports were not kept, so only its worst setup slack is marked.*
+*Setup and hold slack of all 19,390 V6 endpoints from OpenSTA on the final netlist and SPEF; worst setup +2.80 ns and hold +0.24 ns match that route's metrics (the re-route: +5.06 / +0.17 ns). V4's endpoint reports were not kept, so only its worst setup slack is marked.*
 
 ![Standard-cell area by module, V4 and V6](img/area-by-module.png)
 
