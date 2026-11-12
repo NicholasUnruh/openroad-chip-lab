@@ -20,8 +20,7 @@ The introductory 8-bit multiply-accumulate core remains available through `make 
 | [MAC8 interface](docs/mac8.md) | RTL behavior |
 | [Learning path](docs/learning-path.md) | Fundamentals and exercises |
 | [Physical flow](docs/physical-flow.md) | Layout, results, fabrication gates |
-| [Storage recovery](docs/storage-recovery.md) | Offloaded compiled caches |
 
-Retired tiles (scalar FP32, V2, V3, V5) live at tag `archive/pre-cleanup-2026-10-30`, with copies in `~/projects/ARCHIVE/openroad-chip-lab-old-tiles-2026-10-30/`.
+Retired tiles (scalar FP32, V2, V3, V5) live at tag `archive/pre-cleanup-2026-10-30`.
 
 **Fabrication gate:** the layout is a core. A chip needs IO, power, foundry DRC/LVS and signoff before fabrication.

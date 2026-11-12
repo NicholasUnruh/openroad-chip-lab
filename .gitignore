@@ -2,3 +2,4 @@ build/
 bazel-*
 *.vcd
 __pycache__/
+*.local.md

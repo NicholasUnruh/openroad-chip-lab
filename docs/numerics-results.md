@@ -1,6 +1,6 @@
 # Numerics study results
 
-Study plan: [numerics-study.md](numerics-study.md). Verified 2026-11-11 against branch `ai/numerics-asap7`. **ASAP7 is a predictive PDK: every figure below is only a comparison between design points, never a foundry number.**
+Study plan: [numerics-study.md](numerics-study.md). Verified 2026-11-11. **ASAP7 is a predictive PDK: every figure below is only a comparison between design points, never a foundry number.**
 
 ## Answer
 
@@ -93,7 +93,7 @@ Loss curves (10 points per run) are in `build/numerics/train_*.txt`. MXFP4 fails
 
 ```sh
 make sim-dot8 sim-mx sim-int8-dot8   # unit correctness, all formats and frames
-make ppa-all                          # 11 routes (about 30 min on the laptop at ORFS_JOBS=6), then power
-make numerics                         # GEMM error and training emulation (ran on bro, about 20 min)
+make ppa-all                          # 11 routes (about 30 min at ORFS_JOBS=6), then power
+make numerics                         # GEMM error and training emulation (about 20 min)
 python3 tools/numerics/report.py      # every table above
 ```
