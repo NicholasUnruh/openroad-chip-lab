@@ -59,7 +59,7 @@ V7 uses V6's flow, 25 ns clock, SRAM macro placement and power grid. Only the di
 | Peak MACs/clock/mm², cells only | 41.7 | 65.7 (1.57×) |
 | 32³ GEMM MACs/clock/mm², cells + macro | 10.1 | 12.0 (1.18×) |
 
-Both tiles close timing with the same 5 ns margin, and both critical paths are one pipeline stage inside a dot unit (V6 `p_s1` → `p_s2`, V7 `c_s2` → `c_s3`; `timing.rpt` from the flow). V7 doubles the peak MACs per clock for 27% more standard-cell area. Most of that growth is registers, not arithmetic: flops grow from 12,148 to 14,864, and their area grows by 98k µm². V7's two MXFP8 units (273k µm² before placement) are smaller than V6's four BF16 dot units (284k µm²). The tile logic around them grows by 153k µm², because V7 holds 4,352 more operand-register bits ([area by module](physical-flow.md)).
+Both tiles close timing with the same 5 ns margin, and both critical paths are one pipeline stage inside a dot unit (V6 `p_s1` → `p_s2`, V7 `c_s2` → `c_s3`; `timing.rpt` from the flow). V7 doubles the peak MACs per clock for 27% more standard-cell area. Almost half of that 208k µm² is flops: they grow from 12,148 to 14,864, adding 98k µm². V7's two MXFP8 units (273k µm² before placement) are smaller than V6's four BF16 dot units (284k µm²). The tile logic around them grows by 153k µm², because V7 holds 4,352 more operand-register bits ([area by module](physical-flow.md)).
 
 ## SKY130HD power
 
@@ -80,9 +80,9 @@ Each routed netlist runs its own regression benchmark in Verilator with zero-del
 | Combinational logic | 5.3 | 8.8 |
 | SRAM macro | 14.4 | 14.4 |
 
-**The tile does not deliver the unit-level energy gain.** In isolation, an MXFP8 unit uses 2.1× less energy per MAC than a BF16 dot8 unit in SKY130HD (next section). At the tile level, V7 saves 1.16× per MAC on the 32³ GEMM and 1.59× on the pipelined benchmark. The breakdown shows why. Flops and the clock tree take 70% of each tile's power, and they toggle every clock whether the units are busy or not. All combinational logic, arithmetic included, is 8–12%. Tile power is therefore nearly constant per clock (64–77 mW), and energy per MAC follows MACs per clock more than the format. V7 gets its gain mostly by doing twice the MACs per clock, not from cheaper arithmetic. Clock gating the idle operand registers would be the next lever, and these tiles have none.
+**The tile does not deliver the unit-level energy gain.** In isolation, an MXFP8 unit uses 2.1× less energy per MAC than a BF16 dot8 unit in SKY130HD (next section). At the tile level, V7 saves 1.16× per MAC on the 32³ GEMM and 1.59× on the pipelined benchmark. The breakdown shows why. Flops and the clock tree take 70% of each tile's power, and every flop is clocked every cycle whether the units are busy or not. All combinational logic, arithmetic included, is 8–12%. Tile power is therefore nearly constant per clock (64–77 mW), and energy per MAC follows MACs per clock more than the format. V7 gets its gain mostly by doing twice the MACs per clock, not from cheaper arithmetic. Clock gating the idle operand registers would be the next lever, and these tiles have none.
 
-The SRAM macro's 14.4 mW is the same in both tiles and on both benchmarks. Its Liberty model charges a flat internal energy on every clock edge, enabled or not, so treat the macro column as an upper bound. The columns without the macro carry the comparison.
+The SRAM macro's 14.4 mW is the same in both tiles and on both benchmarks. Its Liberty model charges a flat internal energy on every clock edge, enabled or not, so the column does not reflect how much the scratchpad is used. The columns without the macro carry the comparison.
 
 ## ASAP7 prediction vs SKY130HD measurement
 
