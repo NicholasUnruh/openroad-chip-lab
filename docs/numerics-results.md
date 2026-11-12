@@ -66,7 +66,7 @@ Median / p99 of |y − y₆₄| / Σ|aᵢbᵢ| over 2,000 dot products per cell.
 | `int8_tensor` | 2.8e-4 / 1.0e-3 | 7.7e-4 / 2.8e-3 | 7.2e-3 / 2.9e-2 | 1.3e-2 / 5.9e-2 |
 | `int8_row` | 2.1e-4 / 7.9e-4 | 4.3e-4 / 1.6e-3 | 4.8e-3 / 2.0e-2 | 2.0e-4 / 7.9e-4 |
 
-K=256 behaves the same way; the full table is in `build/numerics/gemm_error.txt`. Per-tensor INT8 collapses on row-scaled data (activations whose magnitude varies by token); MX block scaling does not.
+K=256 behaves the same way; the full table is in `results/numerics/gemm_error.txt`. Per-tensor INT8 collapses on row-scaled data (activations whose magnitude varies by token); MX block scaling does not.
 
 ## Training emulation
 
@@ -82,7 +82,7 @@ A 64-64-10 ReLU student learns a fixed random teacher. Every forward, dW and dX 
 | MXFP4 / MXFP8 | 0.8860 | 0.0091 | 0.672 | no (+8.8%) |
 | MXFP4 | 0.8867 | 0.0094 | 0.669 | no (+8.9%) |
 
-Loss curves (10 points per run) are in `build/numerics/train_*.txt`; `tools/plot_figures.py` draws them below.
+Loss curves (10 points per run) are in `results/numerics/train_*.txt`; `tools/plot_figures.py` draws them below.
 
 ![Test loss during training for FP32, BF16 dot8, FP8, MXFP8 and MXFP4](img/numerics-loss-curves.png)
 

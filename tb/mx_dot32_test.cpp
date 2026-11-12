@@ -12,16 +12,53 @@
 #ifndef MX_ELEM
 #define MX_ELEM 0
 #endif
-constexpr MxElement element = MX_ELEM == 0 ? MxElement::e4m3 : MxElement::e2m1;
-constexpr unsigned width = MX_ELEM == 0 ? 8 : 4, exp_bits = MX_ELEM == 0 ? 4 : 2,
-                   man_bits = width - 1 - exp_bits;
-constexpr const char *element_name = MX_ELEM == 0 ? "mxfp8_e4m3" : "mxfp4_e2m1";
+// MX_ELEM 5 is NVFP4: E2M1 elements with two E4M3 block scales per operand.
+constexpr bool nvfp4 = MX_ELEM == 5;
+constexpr MxElement element = nvfp4 ? MxElement::e2m1 : MxElement(MX_ELEM);
+const MxFormat format = mx_format(element);
+const unsigned width = 1 + format.exponent + format.mantissa;
+constexpr const char *element_names[] = {"mxfp8_e4m3", "mxfp4_e2m1", "mxfp8_e5m2",
+                                         "mxfp6_e3m2", "mxfp6_e2m3", "nvfp4_e2m1"};
+constexpr const char *element_name = element_names[MX_ELEM];
 
 struct Vector {
     std::array<uint8_t, 32> a, b;
-    uint8_t sa, sb;
+    uint16_t sa, sb;  // one E8M0 scale, or two E4M3 block scales for NVFP4
     uint32_t c;
 };
+
+static Dot8Result reference(const Vector &v) {
+    if (nvfp4)
+        return nvfp4_dot32(v.a, v.b, {uint8_t(v.sa), uint8_t(v.sa >> 8)},
+                           {uint8_t(v.sb), uint8_t(v.sb >> 8)}, v.c);
+    return mx_dot32(v.a, v.b, uint8_t(v.sa), uint8_t(v.sb), v.c, element);
+}
+
+// One operand's scales for a distribution. MX: an E8M0 exponent; NVFP4: two E4M3 block scales,
+// with codes chosen to cover the same cases (raw bytes, realistic, subnormal or near-max, unit,
+// NaN).
+static uint16_t scale(std::mt19937 &rng, unsigned kind) {
+    auto one = [&]() -> unsigned {
+        switch (kind) {
+            case 0:
+                return rng() & 0xff;
+            case 1:
+            case 4:
+                return nvfp4 ? 0x20 + rng() % 0x5f
+                             : (kind == 1 ? 117 + rng() % 21 : 120 + rng() % 15);
+            case 2:
+                return nvfp4 ? (rng() % 2 ? rng() % 8 : 0x78 + rng() % 7)
+                             : (rng() % 2 ? rng() % 8 : 247 + rng() % 8);
+            case 3:
+            case 5:
+                return nvfp4 ? 0x38 : 127;
+            default:
+                return rng() % 16 ? (nvfp4 ? 0x38 : 127) : (nvfp4 ? 0x7f | (rng() & 0x80) : 255);
+        }
+    };
+    unsigned low = one();
+    return uint16_t(nvfp4 ? low | one() << 8 : low);
+}
 
 static void require(bool condition, const std::string &message) {
     if (!condition) throw std::runtime_error(message);
@@ -35,10 +72,12 @@ static std::string describe(const Vector &v) {
     return out;
 }
 
-// A finite element: E4M3 avoids its NaN code S.1111.111.
+// A finite element: E4M3 avoids its NaN code S.1111.111, E5M2 its all-ones exponent.
 static uint8_t finite(std::mt19937 &rng) {
     uint8_t x = uint8_t(rng() & ((1u << width) - 1));
-    return MX_ELEM == 0 && (x & 0x7f) == 0x7f ? uint8_t(x - 1) : x;
+    if (element == MxElement::e4m3 && (x & 0x7f) == 0x7f) return uint8_t(x - 1);
+    if (element == MxElement::e5m2 && (x & 0x7c) == 0x7c) return uint8_t(x & ~0x04u);
+    return x;
 }
 
 static uint32_t fp32(std::mt19937 &rng, unsigned lo, unsigned hi) {
@@ -54,48 +93,43 @@ static Vector generate(std::mt19937 &rng, unsigned kind) {
         v.b[k] = kind == 0 ? uint8_t(rng() & ((1u << width) - 1)) : finite(rng);
         if (kind == 5) v.a[k] &= uint8_t(1u << (width - 1));  // signed zeros
     }
+    v.sa = scale(rng, kind);
+    v.sb = scale(rng, kind);
     switch (kind) {
         case 0:
-            v.sa = uint8_t(rng());
-            v.sb = uint8_t(rng());
             v.c = rng();
             break;
         case 1:
-            v.sa = uint8_t(117 + rng() % 21);
-            v.sb = uint8_t(117 + rng() % 21);
             v.c = fp32(rng, 110, 145);
             break;
         case 2:
-            v.sa = uint8_t(rng() % 2 ? rng() % 8 : 247 + rng() % 8);
-            v.sb = uint8_t(rng() % 2 ? rng() % 8 : 247 + rng() % 8);
             v.c = rng() % 2 ? fp32(rng, 0, 8)
                             : (rng() % 2 ? fp32(rng, 245, 254) : rng() & 0x807fffffu);
             break;
         case 3:
-            v.sa = 127;
-            v.sb = 127;
             v.c = fp32(rng, 140, 200);
             break;
         case 4: {
-            v.sa = uint8_t(120 + rng() % 15);
-            v.sb = uint8_t(120 + rng() % 15);
             v.c = 0;
-            Dot8Result block = mx_dot32(v.a, v.b, v.sa, v.sb, 0, element);
+            Dot8Result block = reference(v);
             v.c = (block.bits ^ 0x80000000u) + (rng() % 3) - 1;  // leaves a small residue
             if ((v.c & 0x7f800000u) == 0x7f800000u) v.c = 0;
             break;
         }
         case 5:
-            v.sa = 127;
-            v.sb = 127;
             v.c = rng() % 2 ? 0x80000000u : 0u;
             break;
         default: {
             static const uint32_t specials[] = {0x7fc00000u, 0x7f800001u, 0x7f800000u, 0xff800000u,
                                                 0u,          0x80000000u, 0x00000001u};
-            v.sa = uint8_t(rng() % 16 ? 127 : 255);
-            v.sb = uint8_t(rng() % 16 ? 127 : 255);
-            if (MX_ELEM == 0 && rng() % 4 == 0) v.a[rng() % 32] = uint8_t(0x7f | (rng() & 0x80));
+            if (element == MxElement::e4m3 && rng() % 4 == 0)
+                v.a[rng() % 32] = uint8_t(0x7f | (rng() & 0x80));
+            // E5M2: infinities, quiet and signaling NaNs, and zeros to multiply them with.
+            if (element == MxElement::e5m2)
+                for (unsigned n = rng() % 3; n > 0; --n) {
+                    static const uint8_t codes[] = {0x7c, 0xfc, 0x7e, 0x7d, 0x00, 0x80};
+                    (rng() & 1 ? v.a : v.b)[rng() % 32] = codes[rng() % 6];
+                }
             v.c = rng() % 2 ? specials[rng() % 7] : fp32(rng, 120, 135);
         }
     }
@@ -114,15 +148,13 @@ int main(int argc, char **argv) {
         for (unsigned n = 0; n < kinds * per_kind + latency; ++n) {
             if (n < kinds * per_kind) {
                 Vector v = generate(rng, n % kinds);
-                Dot8Result exact = mx_dot32(v.a, v.b, v.sa, v.sb, v.c, element);
-                for (unsigned w = 0; w < 32 * width / 32; ++w) {
-                    uint32_t wa = 0, wb = 0;
-                    for (unsigned k = 0; k < 32 / width; ++k) {
-                        wa |= uint32_t(v.a[w * (32 / width) + k]) << (width * k);
-                        wb |= uint32_t(v.b[w * (32 / width) + k]) << (width * k);
-                    }
-                    dut.a[w] = wa;
-                    dut.b[w] = wb;
+                Dot8Result exact = reference(v);
+                for (unsigned w = 0; w < width; ++w) dut.a[w] = dut.b[w] = 0;
+                for (unsigned bit = 0; bit < 32 * width; ++bit) {
+                    dut.a[bit / 32] |= uint32_t(v.a[bit / width] >> (bit % width) & 1)
+                                       << (bit % 32);
+                    dut.b[bit / 32] |= uint32_t(v.b[bit / width] >> (bit % width) & 1)
+                                       << (bit % 32);
                 }
                 dut.scale_a = v.sa;
                 dut.scale_b = v.sb;

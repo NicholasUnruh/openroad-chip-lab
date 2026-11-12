@@ -131,9 +131,10 @@ sim-int8-dot8:
 	verilator --cc --exe --build -j 4 --top-module int8_dot8_int32 --Mdir build/int8-dot8-sim \
 		rtl/int8_dot8_int32.v $(CURDIR)/tb/int8_dot8_test.cpp -CFLAGS '-std=c++17 -O2'
 	./build/int8-dot8-sim/Vint8_dot8_int32
-# MX block dot product: 0 = MXFP8 (E4M3 elements), 1 = MXFP4 (E2M1 elements).
+# MX block dot product, by element: 0 = MXFP8 E4M3, 1 = MXFP4 E2M1, 2 = MXFP8 E5M2,
+# 3 = MXFP6 E3M2, 4 = MXFP6 E2M3, 5 = NVFP4 (E2M1, E4M3 scale per 16 elements).
 sim-mx:
-	for elem in 0 1; do $(MAKE) sim-mx-elem MX_ELEM=$$elem || exit 1; done
+	for elem in 0 1 2 3 4 5; do $(MAKE) sim-mx-elem MX_ELEM=$$elem || exit 1; done
 sim-mx-elem:
 	verilator --cc --exe --build -j 4 --top-module mx_dot32_fp32 -GELEM=$(MX_ELEM) \
 		--Mdir build/mx-$(MX_ELEM)-sim rtl/mx_dot32_fp32.v rtl/fp32_round.v $(CURDIR)/tb/mx_dot32_test.cpp \
@@ -154,9 +155,9 @@ check-training-structure:
 # Numerics study accuracy (M4): GEMM error against FP64 and the bit-exact training emulation,
 # GEMM error beside five training recipes at a time (six processes).
 .PHONY: numerics
-NUMERICS_DEPS = tools/numerics/datapaths.h tb/dot8_model.h tb/mx_model.h
+NUMERICS_DEPS = tools/numerics/datapaths.h tools/numerics/train.h tb/dot8_model.h tb/mx_model.h
 TRAIN_RECIPES = fp32 bf16_fma bf16_dot8 bf16_dot8_f24 bf16_dot8_f28 bf16_dot8_f36 bf16_dot8_f40 \
-	fp8_tensor mxfp8 mxfp4_fwd_mxfp8_bwd mxfp4
+	fp8_tensor mxfp8 mxfp4_fwd_mxfp8_bwd mxfp4 mxfp8_e5m2_bwd mxfp6_e3m2 mxfp6_e2m3 mxfp4_sr nvfp4 nvfp4_sr
 build/%: tools/numerics/%.cpp $(NUMERICS_DEPS)
 	mkdir -p build
 	g++ $(TRAINING_CFLAGS) -o $@ $<

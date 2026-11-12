@@ -155,10 +155,11 @@ inline Dot8Result dot8_spec(const std::array<uint16_t, 8> &a, const std::array<u
 
 namespace dot8 {
 
-// Exact two's-complement sum of finite terms in 640 bits, then correctly rounded to FP32.
+// Exact two's-complement sum of finite terms in 704 bits (MXFP8 E5M2 terms reach 2^294), then
+// correctly rounded to FP32.
 inline Dot8Result exact_round(const Term *begin, const Term *end, bool all_zero,
                               bool all_negative) {
-    constexpr int words = 10, offset = 300;  // bit i has weight 2^(i - offset)
+    constexpr int words = 11, offset = 300;  // bit i has weight 2^(i - offset)
     std::array<uint64_t, words> acc{};
     for (const Term *x = begin; x != end; ++x) {
         if (!x->sig) continue;
