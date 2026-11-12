@@ -16,5 +16,3 @@ Start with the same block at each abstraction level. Read `rtl/mac8.v`, then pre
 For the theory alongside this lab, use [MIT 6.004 Computation Structures](https://ocw.mit.edu/courses/6-004-computation-structures-spring-2017/) from MOS devices through digital systems. [Nand2Tetris Part I](https://www.nand2tetris.org/course) provides guided gate, ALU and CPU exercises. Then follow the [OpenROAD flow tutorial](https://openroad-flow-scripts.readthedocs.io/en/latest/tutorials/FlowTutorial.html) for the physical-design stages.
 
 First experiment: change `a * b` to `a + b`, update the expected testbench values, run simulation and synthesis, then compare cell count and timing. Restore the multiplier before continuing the main flow.
-
-Next project: a small UART transmitter or timer core with a written interface specification and self-checking testbench.

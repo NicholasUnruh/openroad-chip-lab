@@ -26,7 +26,7 @@ Matched at the RTL point (lanes 8, two buffers, 4-byte ports; four units, two C 
 | 32³ GEMM incl. scratchpad fill | — | 2,181 |
 | Eight 16³ GEMMs, next one loading during the current one | — | 2,720 |
 
-The V6 32³ figure is 2,181 on current RTL; the 2,165 quoted in older notes predates the dot8 pipeline stages.
+The V6 32³ figure includes the two dot-product pipeline stages added for the numerics study; before them it was 2,165.
 
 ## V4: lanes × host port (32³ streamed GEMM, clocks)
 
@@ -78,7 +78,7 @@ C banks, four units:
 - **Two C banks are right.** One bank serializes each output drain against the next tile (+47% at the
   RTL point). A third saves 2–3% at two points and nothing elsewhere.
 
-## Limits
+## Limitations
 
 - **Wider ports are host-side only.** They assume the tile's banks widen to match; the RTL ports are
   32-bit.

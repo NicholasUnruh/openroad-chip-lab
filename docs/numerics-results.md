@@ -1,6 +1,6 @@
 # Numerics study results
 
-Study plan: [numerics-study.md](numerics-study.md). Verified 2026-11-11. **ASAP7 is a predictive PDK: every figure below is only a comparison between design points, never a foundry number.**
+Method: [numerics-study.md](numerics-study.md). Verified 2026-11-11. **ASAP7 is a predictive PDK: every figure below is only a comparison between design points, never a foundry number.**
 
 ## Answer
 
@@ -80,10 +80,10 @@ A 64-64-10 ReLU student learns a fixed random teacher. Every forward, dW and dX 
 
 Loss curves (10 points per run) are in `build/numerics/train_*.txt`. MXFP4 fails even with MXFP8 gradients, so the forward pass is where FP4 loses accuracy.
 
-## Choices and limits
+## Choices and limitations
 
-- **Tolerance (gate).** The study said "within a set loss tolerance of FP32" without setting one. I set 1% of FP32's mean final test loss, about 3× FP32's seed spread. Per-tensor FP8 passes at +0.85%, so it is marginal: a 0.75% gate would fail it, while MXFP8 passes either way.
-- **Training fix.** The committed emulation reused 4,096 samples for about 47 epochs: train loss 0.06 against test loss 2.3, so overfitting decided the result, not arithmetic. Drawing fresh batches and decaying the learning rate fixes that; it does not change the method in the study plan.
+- **Tolerance (gate).** The gate is 1% of FP32's mean final test loss, about 3× FP32's seed spread. Per-tensor FP8 passes at +0.85%, so it is marginal: a 0.75% gate would fail it, while MXFP8 passes either way.
+- **Fresh batches.** Reusing a fixed 4,096-sample set for about 47 epochs overfits (train loss 0.06 against test loss 2.3), so overfitting rather than arithmetic would decide the ranking. Each step therefore draws a fresh batch and the learning rate decays.
 - **Optimistic FP8 scaling.** Per-tensor FP8 scales each tensor from its own current amax (just-in-time). Delayed scaling, which production recipes use, is likely worse.
 - **Small model.** A 64-unit MLP is far from transformer training. The training result only orders the formats and should not be read as a prediction at scale.
 - **Accumulator input.** The harness drives an independent random accumulator every clock instead of feeding the result back, so accumulator toggle rates are approximate.
