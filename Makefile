@@ -148,3 +148,18 @@ numerics: build/gemm_error build/train_mlp
 	printf '%s\n' $(TRAIN_RECIPES) | xargs -P 5 -I{} sh -c './build/train_mlp 3000 3 {} > build/numerics/train_{}.txt'; \
 	wait
 	cat build/numerics/train_*.txt | grep '^final'
+
+# Cycle-level V4/V6 performance model: its BENCH lines must equal both RTL testbenches'
+# clock for clock; the sweep varies lanes/units, buffers/C banks and host port width.
+.PHONY: model-check model-sweep
+build/tile_model: model/tile_model.cpp
+	mkdir -p build
+	g++ -std=c++17 -O2 -Wall -Wextra -Werror -o $@ $<
+model-check: build/tile_model
+	$(MAKE) --no-print-directory sim-training-v4 | grep '^BENCH' > build/model_rtl_bench.txt
+	$(MAKE) --no-print-directory sim-training-v6 | grep '^BENCH' >> build/model_rtl_bench.txt
+	./build/tile_model bench > build/model_bench.txt
+	diff build/model_rtl_bench.txt build/model_bench.txt
+	@echo "PASS: tile_model matches $$(wc -l < build/model_bench.txt) RTL BENCH lines"
+model-sweep: build/tile_model
+	./build/tile_model sweep
