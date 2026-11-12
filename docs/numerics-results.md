@@ -4,7 +4,7 @@ Study plan: [numerics-study.md](numerics-study.md). Verified 2026-11-11 against 
 
 ## Answer
 
-Among datapaths that train within the tolerance, **MXFP8 32-term block dot products** give the most throughput per mm² (2.13× the BF16 dot8) and per joule (2.32×). Per-tensor FP8 dot8 units come next at about 1.5×. **MXFP4 is 5.8× denser but fails training** (+8.9% test loss). For BF16, the frame width is a free knob: narrowing the alignment frame from 32 to 24 bits saves 9% area and 5% energy with no measurable change in error or training. Chained FMAs cost 3.3× the dot8's energy per MAC and give 0.33× its throughput per mm².
+Among datapaths that train within the tolerance, **MXFP8 32-term block dot products** give the most throughput per mm² (2.17× the BF16 dot8) and per joule (2.33×). Per-tensor FP8 dot8 units come next at about 1.5–1.6×. **MXFP4 is 5.9× denser but fails training** (+8.9% test loss). For BF16, the frame width is a free knob: narrowing the alignment frame from 32 to 24 bits saves 11% area and 8% energy, and lifts fmax above 1 GHz, with no measurable change in error or training. Chained FMAs cost 3.3× the dot8's energy per MAC and give 0.34× its throughput per mm².
 
 ## Ranking
 
@@ -12,17 +12,17 @@ Throughput per mm² uses the routed fmax; energy uses simulated activity at 1 GH
 
 | Rank | Point | Trains | GMAC/s/mm² | × dot8_bf16 | MAC/nJ | × dot8_bf16 |
 | ---: | --- | --- | ---: | ---: | ---: | ---: |
-| 1 | `dot32_mxfp8` | yes | 11,578 | 2.13 | 2,406 | 2.32 |
-| 2 | `dot8_e5m2` | yes (FP8 recipe) | 8,372 | 1.54 | 1,584 | 1.53 |
-| 3 | `dot8_e4m3` | yes (FP8 recipe) | 8,191 | 1.51 | 1,479 | 1.43 |
-| 4 | `dot8_bf16_f24` | yes | 6,596 | 1.21 | 1,091 | 1.05 |
-| 5 | `dot8_bf16_f28` | yes | 6,310 | 1.16 | 1,071 | 1.03 |
-| 6 | `dot8_bf16` (frame 32, V6 unit) | yes | 5,429 | 1.00 | 1,038 | 1.00 |
-| 7 | `dot8_bf16_f36` | yes | 5,208 | 0.96 | 999 | 0.96 |
-| 8 | `dot8_bf16_f40` | yes | 5,095 | 0.94 | 983 | 0.95 |
-| 9 | `fma_bf16` | yes | 1,800 | 0.33 | 313 | 0.30 |
-| — | `dot32_mxfp4` | no | 31,348 | 5.77 | 4,992 | 4.81 |
-| — | `dot8_int8` | inference only | 26,476 | 4.88 | 2,974 | 2.87 |
+| 1 | `dot32_mxfp8` | yes | 11,578 | 2.17 | 2,406 | 2.33 |
+| 2 | `dot8_e4m3` | yes (FP8 recipe) | 8,783 | 1.64 | 1,509 | 1.46 |
+| 3 | `dot8_e5m2` | yes (FP8 recipe) | 8,287 | 1.55 | 1,566 | 1.51 |
+| 4 | `dot8_bf16_f24` | yes | 6,930 | 1.30 | 1,125 | 1.09 |
+| 5 | `dot8_bf16_f28` | yes | 6,629 | 1.24 | 1,074 | 1.04 |
+| 6 | `dot8_bf16` (frame 32, V6 unit) | yes | 5,347 | 1.00 | 1,034 | 1.00 |
+| 7 | `dot8_bf16_f36` | yes | 5,137 | 0.96 | 1,001 | 0.97 |
+| 8 | `dot8_bf16_f40` | yes | 5,097 | 0.95 | 979 | 0.95 |
+| 9 | `fma_bf16` | yes | 1,800 | 0.34 | 313 | 0.30 |
+| — | `dot32_mxfp4` | no | 31,348 | 5.86 | 4,992 | 4.83 |
+| — | `dot8_int8` | inference only | 26,476 | 4.95 | 2,974 | 2.88 |
 
 E4M3 and E5M2 are one recipe (E4M3 forward, E5M2 gradients), so a training chip needs both or a unit that handles both.
 
@@ -33,18 +33,18 @@ Each unit is routed behind registered inputs in a fixed harness, with a 1 GHz ta
 | Point | MACs/clk | Area µm² | Area/MAC µm² | fmax MHz | Power at 1 GHz mW | Energy fJ/MAC |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `fma_bf16` | 1 | 579 | 579 | 1042 | 3.19 | 3190 |
-| `dot8_bf16` | 8 | 1314 | 164 | 892 | 7.71 | 964 |
-| `dot8_bf16_f24` | 8 | 1196 | 150 | 986 | 7.33 | 916 |
-| `dot8_bf16_f28` | 8 | 1248 | 156 | 984 | 7.47 | 934 |
-| `dot8_bf16_f36` | 8 | 1396 | 174 | 909 | 8.01 | 1001 |
-| `dot8_bf16_f40` | 8 | 1458 | 182 | 928 | 8.14 | 1018 |
-| `dot8_e4m3` | 8 | 960 | 120 | 983 | 5.41 | 676 |
-| `dot8_e5m2` | 8 | 916 | 115 | 959 | 5.05 | 631 |
+| `dot8_bf16` | 8 | 1319 | 165 | 882 | 7.74 | 968 |
+| `dot8_bf16_f24` | 8 | 1170 | 146 | 1014 | 7.11 | 889 |
+| `dot8_bf16_f28` | 8 | 1236 | 155 | 1024 | 7.45 | 931 |
+| `dot8_bf16_f36` | 8 | 1402 | 175 | 900 | 7.99 | 999 |
+| `dot8_bf16_f40` | 8 | 1448 | 181 | 923 | 8.17 | 1021 |
+| `dot8_e4m3` | 8 | 938 | 117 | 1030 | 5.30 | 662 |
+| `dot8_e5m2` | 8 | 932 | 116 | 965 | 5.11 | 639 |
 | `dot32_mxfp8` | 32 | 2753 | 86 | 996 | 13.30 | 416 |
 | `dot32_mxfp4` | 32 | 1053 | 33 | 1032 | 6.41 | 200 |
 | `dot8_int8` | 8 | 435 | 54 | 1441 | 2.69 | 336 |
 
-All 11 routes pass hold, slew, capacitance, fanout and router DRC. Setup slack is the fmax measurement, not a gate. fmax does not change monotonically with frame width (32: 892, 36: 909, 40: 928 MHz), so differences under about 5% between neighbouring points are placement and repair noise.
+All 11 routes pass hold, slew, capacitance, fanout and router DRC. Setup slack is the fmax measurement, not a gate. fmax does not change monotonically with frame width (32: 882, 36: 900, 40: 923 MHz), and a functionally identical earlier netlist of each `fp_dot8` point routed up to 4% different in fmax and area, so differences under about 5% between neighbouring points are placement and repair noise.
 
 **Energy method.** Each routed netlist is simulated with zero-delay cell models generated from the ASAP7 Liberty functions. Stimulus is 2,000 clocks of N(0, 1) operands quantized to the point's format, with N(0, 16) FP32 accumulator inputs. The routed outputs must match the Yosys netlist bit for bit after warm-up, and they do for all 11 points. OpenSTA reads the VCD (100% of pins annotated) and extracted SPEF, then reports power. The earlier probabilistic input-activity method put `fma_bf16` at 17.7 mW, 5.5× the simulated value, because it propagates toggles through the deep arithmetic logic without correlation. Zero-delay simulation leaves out glitch power, so absolute energies are low by an unknown factor; the comparison assumes it is similar across points.
 

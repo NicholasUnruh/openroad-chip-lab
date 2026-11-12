@@ -2,14 +2,14 @@
 
 ## In flight
 ## Queued
-- [ ] tile_perf_model - C++ cycle-level model of V4 and V6 in `model/`, matching RTL clock counts (32^3 GEMM: V4 4480, V6 2165); then sweep lanes, buffer depth and host port width (repo: openroad-chip-lab) (queued 2026-11-11)
+- [ ] tile_perf_model - C++ cycle-level model of V4 and V6 in `model/`, matching RTL clock counts (32^3 GEMM: V4 4480, V6 2181; the 2165 recorded earlier predates the dot8 pipeline stages); then sweep lanes, buffer depth and host port width (repo: openroad-chip-lab) (queued 2026-11-11)
 ## Done
 - [x] numerics_ppa_asap7 - Rank BF16/FP8/MX/INT8 MAC datapaths by area, fmax, energy and training accuracy at ASAP7 (repo: openroad-chip-lab) (done 2026-11-11)
-  docs/numerics-results.md. 11 routed points (plus BF16 frames 24-40), VCD-annotated energy, GEMM error, bit-exact training. MXFP8 ranks first among training-usable points (2.13x area, 2.32x energy vs BF16 dot8); MXFP4 fails the 1% loss gate; BF16 frame 24 is free. Tolerance was unset in the plan and fixed at 1%; per-tensor FP8 passes marginally (+0.85%).
+  docs/numerics-results.md. 11 routed points (7 datapaths plus BF16 frames 24, 28, 36, 40), VCD-annotated energy, GEMM error, bit-exact training. MXFP8 ranks first among training-usable points (2.17x throughput/mm2, 2.33x MAC/J vs BF16 dot8); MXFP4 fails the 1% loss gate; BF16 frame 24 is free. Tolerance was unset in the plan and fixed at 1%; per-tensor FP8 passes marginally (+0.85%).
 - [x] retire_old_tiles - Archive scalar FP32, V2, V3 and V5 tiles; keep V4, V6, MAC8 and numerics (repo: openroad-chip-lab) (done 2026-10-30)
   Copies in ~/projects/ARCHIVE/openroad-chip-lab-old-tiles-2026-10-30/; full state at tag archive/pre-cleanup-2026-10-30. Live contract text moved to docs/training-v4-interface.md and docs/training-v6-interface.md. V4 RTL/netlist 1833 jobs and V6 RTL 467 GEMMs match the pre-cleanup baseline line for line. Older Done entries keep their original doc paths; those docs are in the archive.
 - [x] training_tile_v6 - Fused BF16 dot-product tile behind the V5 scratchpad (repo: openroad-chip-lab) (done 2026-10-19)
-  32 MACs/clk via four 8-term dot-product units; 467 GEMMs pass on RTL and netlist. SKY130HD route at 25 ns: setup +2.80 ns, hold +0.24 ns, zero DRC/DRV, stdcell 749,555 um2 + 722,109 um2 macro. Open defect: 7 antenna nets after 807 diodes. 32^3 GEMM 2165 clocks vs V4 4480; per total mm2 equal to V4 at the ideal port because of the SRAM macro. docs/training-v6-results.md.
+  32 MACs/clk via four 8-term dot-product units; 467 GEMMs pass on RTL and netlist. SKY130HD route at 25 ns: setup +2.80 ns, hold +0.24 ns, zero DRC/DRV, stdcell 749,555 um2 + 722,109 um2 macro. Open defect: 7 antenna nets after 807 diodes. 32^3 GEMM 2181 clocks on current RTL (2165 at 13fa6a8) vs V4 4480; per total mm2 equal to V4 at the ideal port because of the SRAM macro. docs/training-v6-results.md.
 - [x] training_tile_v5 - 4 KB SRAM scratchpad and GEMM sequencer in front of the V4 engine (repo: openroad-chip-lab) (done 2026-10-18)
   RTL and generic netlist pass 467 GEMMs; 32^3 GEMM 5510 clocks / 8192 B vs V4 4480 / 20480 B. Superseded by V6 before its own layout; V6 routing validated the shared macro PDN and placement.
 - [x] training_tile_v4 - Build eight-lane 8x8 BF16 tile and verify operand reuse and physical performance (repo: openroad-chip-lab) (done 2026-09-13)

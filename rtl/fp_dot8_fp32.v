@@ -143,7 +143,8 @@ module fp_dot8_fp32 #(
             p_frame[PW-1:0] = p_s2[PW*k +: PW];
             justified = k == 8 ? c_frame << (FRAME - 24) : p_frame << (FRAME - PW);
             d = term_dist_s2[6*k +: 6];
-            aligned[FRAME*k +: FRAME] = d >= FRAME6 ? {FRAME{1'b0}} : justified >> d;
+            // d saturates at FRAME, where the shift already yields zero.
+            aligned[FRAME*k +: FRAME] = justified >> d;
             // Bits below the shift distance are the ones truncated away.
             for (x = 0; x < FRAME; x = x + 1) low_mask[x] = {26'd0, d} > x;
             truncated = truncated | (justified & low_mask) != {FRAME{1'b0}};
