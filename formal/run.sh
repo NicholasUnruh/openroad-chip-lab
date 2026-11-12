@@ -6,6 +6,7 @@
 # usage: [STRIDE=n] formal/run.sh [jobs] [elem...]   (needs SymbiYosys and Bitwuzla on PATH)
 # STRIDE=n checks every n-th c exponent plus both ends of the range.
 set -eu
+command -v sby bitwuzla > /dev/null || { echo "error: sby and bitwuzla must be on PATH" >&2; exit 2; }
 lab=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 out="$lab/build/formal"
 
@@ -32,6 +33,7 @@ $lab/rtl/fp32_round.v
 $lab/formal/mx_dot32_formal.v
 EOF
     start=$(date +%s)
+    rm -rf "${out:?}/$name"  # a stale status file would read as this run's result
     timeout 3600 sby -f -d "$out/$name" "$out/$name.sby" > /dev/null 2>&1 || true
     status=$(cut -d' ' -f1 "$out/$name/status" 2>/dev/null || echo TIMEOUT)
     printf '%s elem=%s mode=%s cexp=%s seconds=%s\n' "$status" "$elem" "$mode" "$cexp" \
