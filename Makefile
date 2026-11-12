@@ -4,12 +4,12 @@
 HARDFLOAT = third_party/hardfloat
 TRAINING_TOP ?= training_tile_v4
 TRAINING_BUILD = build/$(subst _,-,$(subst training_tile,training,$(TRAINING_TOP)))
-TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v4,$(TRAINING_TOP)),rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v) $(if $(filter training_tile_v6,$(TRAINING_TOP)),rtl/fp_dot8_fp32.v rtl/fp32_round.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
+TRAINING_RTL = rtl/$(TRAINING_TOP).v $(if $(filter training_tile_v4,$(TRAINING_TOP)),rtl/training_tile_engine.v rtl/fp32_accum_fma_pipe.v) $(if $(filter training_tile_v6,$(TRAINING_TOP)),rtl/fp_dot8_fp32.v rtl/fp32_round.v) $(if $(filter training_tile_v7,$(TRAINING_TOP)),rtl/mx_dot32_fp32.v rtl/fp32_round.v) $(wildcard $(HARDFLOAT)/*.v) $(HARDFLOAT)/RISCV/HardFloat_specialize.v
 TRAINING_INCLUDES = -I$(HARDFLOAT) -I$(HARDFLOAT)/RISCV
 # Simulation model of the SRAM macro; synthesis reads it as a black box.
-TRAINING_MACROS = $(if $(filter training_tile_v6,$(TRAINING_TOP)),tb/sky130_sram_1rw1r_128x256_8.v)
+TRAINING_MACROS = $(if $(filter training_tile_v6 training_tile_v7,$(TRAINING_TOP)),tb/sky130_sram_1rw1r_128x256_8.v)
 TRAINING_READ_MACROS = $(if $(TRAINING_MACROS),read_verilog -lib $(TRAINING_MACROS);)
-TRAINING_TEST = tb/$(if $(filter training_tile_v6,$(TRAINING_TOP)),scratchpad_tile_test,training_tile_test).cpp
+TRAINING_TEST = tb/$(if $(filter training_tile_v6,$(TRAINING_TOP)),scratchpad_tile_test,$(if $(filter training_tile_v7,$(TRAINING_TOP)),mx_tile_test,training_tile_test)).cpp
 TRAINING_CFLAGS = -std=c++17 -O2 -fno-fast-math -ffp-contract=off
 
 ifeq ($(TRAINING_TOP),training_tile_v4)
@@ -81,6 +81,24 @@ layout-training-v6:
 	$(MAKE) layout-training TRAINING_TOP=training_tile_v6
 check-training-v6-structure:
 	$(MAKE) check-training-structure TRAINING_TOP=training_tile_v6
+
+.PHONY: sim-training-v7 synth-training-v7 sim-training-v7-netlist layout-training-v7 train-training-v7
+sim-training-v7:
+	$(MAKE) sim-training TRAINING_TOP=training_tile_v7
+synth-training-v7:
+	$(MAKE) synth-training TRAINING_TOP=training_tile_v7
+sim-training-v7-netlist:
+	$(MAKE) sim-training-netlist TRAINING_TOP=training_tile_v7
+layout-training-v7:
+	$(MAKE) layout-training TRAINING_TOP=training_tile_v7
+# The study's MXFP8 training run with every GEMM on the Verilated V7 tile (about 30 min).
+train-training-v7:
+	verilator --cc --exe --build -j 4 --top-module training_tile_v7 --Mdir build/training-v7-train \
+		rtl/training_tile_v7.v rtl/mx_dot32_fp32.v rtl/fp32_round.v tb/sky130_sram_1rw1r_128x256_8.v \
+		$(CURDIR)/tb/mx_tile_train.cpp -CFLAGS '$(TRAINING_CFLAGS)'
+	mkdir -p build/numerics
+	./build/training-v7-train/Vtraining_tile_v7 3000 3 > build/numerics/train_mxfp8_v7_tile.txt
+	grep '^final' build/numerics/train_mxfp8_v7_tile.txt
 
 # ASAP7 PPA harnesses: flatten with Yosys, then run ORFS to route (bin/ppa).
 # ppa_dot8_bf16_f<N> is the BF16 dot8 harness with a FRAME of N bits.
