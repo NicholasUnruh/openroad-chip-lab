@@ -90,14 +90,14 @@ The numerics study ranked formats on routed ASAP7 units ([format cost](journal/2
 
 | Unit | SKY130 area/MAC, µm² | SKY130 energy/MAC, pJ | Area/MAC gain, ASAP7 → SKY130 | Energy/MAC gain, ASAP7 → SKY130 |
 | --- | ---: | ---: | ---: | ---: |
-| BF16 dot8 | 12,261 | 11.70 | 1 → 1 | 1 → 1 |
-| MXFP8 dot32 | 5,939 | 5.53 | 1.94× → 2.06× | 2.33× → 2.12× |
-| MXFP6 E2M3 dot32 | 3,269 | 3.50 | 3.58× → 3.75× | 3.40× → 3.34× |
+| BF16 dot8 | 12,193 | 11.69 | 1 → 1 | 1 → 1 |
+| MXFP8 dot32 | 5,899 | 5.53 | 1.93× → 2.07× | 2.35× → 2.11× |
+| MXFP6 E2M3 dot32 | 3,259 | 3.50 | 3.61× → 3.74× | 3.44× → 3.34× |
 
 | Tile claim | ASAP7 unit prediction | SKY130 tile measurement |
 | --- | ---: | ---: |
-| MXFP8 vs BF16, throughput per area | 1.90× | 1.76× peak (cells + macro), 1.57× (cells only) |
-| MXFP8 vs BF16, energy per MAC | 2.33× | 1.16× (32³ GEMM), 1.59× (pipelined) |
+| MXFP8 vs BF16, throughput per area | 2.03× | 1.76× peak (cells + macro), 1.57× (cells only) |
+| MXFP8 vs BF16, energy per MAC | 2.35× | 1.16× (32³ GEMM), 1.59× (pipelined) |
 
 **The ranking holds and the unit ratios transfer.** Every unit ratio agrees across PDKs within 11%, so the ASAP7 study's ordering of BF16, MXFP8 and MXFP6 E2M3 survives a real PDK. All three SKY130 units close at about 100 MHz, because the 10 ns target, not the logic, sets fmax. Their throughput ratios therefore reduce to the area ratios.
 
