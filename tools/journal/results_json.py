@@ -37,6 +37,9 @@ TILES = [
     ("MXFP8", "gemm32", "training_tile_v7-gemm32"),
     ("MXFP8", "pipelined", "training_tile_v7-gemm16x32_pipelined"),
 ]
+GPT2_SOURCE = "docs/journal/data/training-gpt2.json"
+GPT2_FORMATS = {"mxfp8": "MXFP8", "mxfp6_e2m3": "MXFP6 E2M3", "mxfp6_e3m2": "MXFP6 E3M2",
+                "mxfp4": "MXFP4", "nvfp4": "NVFP4"}  # fmt: skip
 # A run counts as diverged, with no penalty value, when its mean final test loss exceeds this
 # multiple of FP32's (the worst converging recipe is 1.17x).
 DIVERGED = 2.0
@@ -70,6 +73,14 @@ def main(argv):
         else:
             row["note"] = f"diverged (mean test loss {loss:.2f} vs FP32 {fp32:.4f})"
         rows.append(row)
+    # GPT-2 124M runs (tools/numerics/training/summarize.py): final validation loss against BF16
+    # at the same step, with only the transformer-block Linears in the emulated format.
+    gpt2 = json.loads((report.ROOT / GPT2_SOURCE).read_text())
+    for run, r in gpt2["runs"].items():
+        if "penalty_pct_vs_bf16" in r:
+            rows.append({"format": GPT2_FORMATS[run], "metric": "gpt2_loss_penalty_pct",
+                         "value": r["penalty_pct_vs_bf16"], "unit": "% val loss vs BF16",
+                         "source": GPT2_SOURCE, "note": gpt2["scope"]})
     for name, bench, directory in TILES:
         summary = (report.ROOT / "results/sky130/tile-power" / directory / "summary.txt").read_text()
         fields = dict(f.split("=") for f in summary.split())
