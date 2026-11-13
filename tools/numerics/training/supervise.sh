@@ -5,8 +5,8 @@
 # - Singleton: a second copy exits at once, so a periodic launcher can start it blindly.
 # - Each chunk (train.py, at most --chunk-minutes) holds $GPU_LOCK; between chunks the lock is
 #   released for a short gap so other GPU jobs waiting on it can run.
-# - train.py exits 75 when its chunk ends or when another process appears on the GPU (it saves a
-#   checkpoint first); after a yield the supervisor waits before retrying.
+# - train.py exits 75 when its chunk ends (it saves a checkpoint first). It shares the GPU with
+#   interactive use itself (gpu_share in train.py) instead of stopping.
 # - Bounded: at most $MAX_CHUNKS chunks per invocation and $MAX_FAILURES failed chunks per run.
 set -u
 cd "$(dirname "$0")"
@@ -39,12 +39,7 @@ for ((chunk = 1; chunk <= MAX_CHUNKS; chunk++)); do
   status=$?
   if [[ $status -eq 0 ]]; then
     log "$name complete"
-  elif [[ $status -eq 75 ]]; then
-    if tail -n 1 "$RUNS/$name/log.jsonl" | grep -q '"yield"'; then
-      log "$name yielded the GPU; waiting"
-      sleep 300
-    fi
-  else
+  elif [[ $status -ne 75 ]]; then
     failures[$name]=$(( ${failures[$name]:-0} + 1 ))
     log "$name failed with status $status (${failures[$name]} of $MAX_FAILURES)"
   fi

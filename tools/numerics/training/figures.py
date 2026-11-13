@@ -86,9 +86,14 @@ def formats() -> None:
 
 
 def read_log(path: Path):
+    """Train and eval records. A machine that stops abruptly can leave NUL padding or a torn last
+    line; the run then resumes from its last checkpoint and logs those steps again."""
     train, evals = [], []
-    for line in path.read_text().splitlines():
-        r = json.loads(line)
+    for line in path.read_text().replace("\0", "").splitlines():
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError:
+            continue
         if r["event"] == "train":
             train.append(r)
         elif r["event"] == "eval":

@@ -8,8 +8,9 @@ the tied LM head run in BF16 autocast, as in the BF16 baseline (the NVFP4 pretra
 arXiv 2509.25149, also keeps the embeddings and output head in higher precision).
 
 Every format uses the same data order, seed and hyperparameters. The run checkpoints every
---checkpoint-minutes, exits with status 75 after --chunk-minutes or when another process is using
-the GPU (the supervisor resumes it), and exits 0 once the token budget is done.
+--checkpoint-minutes, exits with status 75 after --chunk-minutes (the supervisor resumes it), and
+exits 0 once the token budget is done. When someone else uses the GPU, the run keeps going but
+shrinks its share of GPU time to fit their load (gpu_share), so their programs stay responsive.
 
 usage: uv run --extra cuda python train.py --name mxfp8 --format mxfp8 --data data --runs runs
 """
@@ -34,7 +35,7 @@ PAUSED = 75
 FORMATS = {"bf16": None, **mx.FORMATS}
 
 # Processes that sit on the GPU for the Windows desktop: every program under C:\Windows\ (shell
-# hosts come and go) plus these. Anything else means someone is using the machine; the run yields.
+# hosts come and go) plus these. Anything else means someone is using the machine; see gpu_share.
 DESKTOP = (
     "msedgewebview2.exe", "NVIDIA Overlay.exe", "PhoneExperienceHost.exe", "copilotapp.exe",
     "copilotapphost.exe", "[Insufficient Permissions]", "[Not Found]",
@@ -55,6 +56,30 @@ def foreign_gpu_process() -> str | None:
         if name and name not in DESKTOP and not path.lower().startswith("c:/windows/"):
             return name
     return None
+
+
+def gpu_share() -> tuple[float, int | None]:
+    """Fraction of GPU time this run should take, and the other programs' GPU utilization (%).
+
+    With only the desktop on the GPU the run takes all of it. Otherwise it goes idle for 1.5 s and
+    reads the driver's utilization, which is then the other programs' alone, and steps its share
+    down as their load rises: a browser or video barely uses the GPU, a game uses most of it.
+    """
+    if not foreign_gpu_process():
+        return 1.0, None
+    torch.cuda.synchronize()
+    time.sleep(1.5)
+    cmd = ["/mnt/c/Windows/System32/nvidia-smi.exe", "--query-gpu=utilization.gpu",
+           "--format=csv,noheader,nounits"]  # fmt: skip
+    try:
+        util = int(subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout.split()[0])
+    except (OSError, subprocess.TimeoutExpired, IndexError, ValueError):
+        return 0.5, None
+    if util < 10:
+        return 1.0, util
+    if util < 40:
+        return 0.5, util
+    return 0.15, util
 
 
 class EmulatedLinear(torch.autograd.Function):
@@ -233,16 +258,17 @@ def main() -> int:
         raise ValueError("token budget exceeds the training data")
     start = last_ckpt = time.time()
     last_check = 0.0
+    share = 1.0
     accum = args.batch // args.micro
     status = PAUSED
     while step < steps:
         now = time.time()
         if now - last_check > 30:
             last_check = now
-            other_proc = foreign_gpu_process()
-            if other_proc:
-                record(event="yield", step=step, process=other_proc)
-                break
+            new_share, other_util = gpu_share()
+            if new_share != share:
+                record(event="share", step=step, share=new_share, other_util=other_util)
+                share = new_share
         if now - start > 60 * args.chunk_minutes or (args.max_steps and step >= args.max_steps):
             break
         if step % args.eval_every == 0:
@@ -253,18 +279,27 @@ def main() -> int:
         for group in opt.param_groups:
             group["lr"] = lr
         loss_sum = 0.0
+        idle = 0.0
         kernel.exact_fallbacks = 0
         for micro in range(accum):
+            t_micro = time.time()
             x, y = train.get((step * accum + micro) * args.micro, args.micro)
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 loss = model(x, y) / accum
             loss.backward()
-            loss_sum += loss.item()
+            loss_sum += loss.item()  # waits for the GPU, so the time below is the micro-batch's
+            if share < 1.0:
+                # Release cached activation memory and stay off the GPU long enough that the run
+                # holds only `share` of its time; the other program gets the VRAM and the rest.
+                torch.cuda.empty_cache()
+                pause = (time.time() - t_micro) * (1 - share) / share
+                time.sleep(pause)
+                idle += pause
         norm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0))
         opt.step()
         opt.zero_grad(set_to_none=True)
         step += 1
-        dt = time.time() - t0
+        dt = time.time() - t0 - idle
         if not math.isfinite(loss_sum):
             record(event="diverged", step=step, loss=loss_sum)
             (run / "DONE").write_text("diverged\n")
