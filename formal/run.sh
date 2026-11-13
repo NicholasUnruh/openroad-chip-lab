@@ -3,9 +3,11 @@
 # per element type, MODE 0 (products), MODE 2 (specials) and one MODE 1 (alignment) case per c
 # exponent across the range where c and the block sum interact, with 26 binades of margin each side.
 # Writes build/formal/summary.txt (one line per case) and exits 1 unless every case passes.
-# usage: [STRIDE=n] formal/run.sh [jobs] [elem...]   (needs SymbiYosys and Bitwuzla on PATH)
+# usage: [STRIDE=n] [CASE_TIMEOUT=s] formal/run.sh [jobs] [elem...]   (needs SymbiYosys and Bitwuzla on PATH)
 # STRIDE=n checks every n-th c exponent plus both ends of the range.
+# CASE_TIMEOUT is the per-case limit in seconds (default 3600); a case that hits it reports TIMEOUT.
 set -eu
+command -v sby bitwuzla > /dev/null || { echo "error: sby and bitwuzla must be on PATH" >&2; exit 2; }
 lab=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 out="$lab/build/formal"
 
@@ -32,7 +34,8 @@ $lab/rtl/fp32_round.v
 $lab/formal/mx_dot32_formal.v
 EOF
     start=$(date +%s)
-    timeout 3600 sby -f -d "$out/$name" "$out/$name.sby" > /dev/null 2>&1 || true
+    rm -rf "${out:?}/$name"  # a stale status file would read as this run's result
+    timeout "${CASE_TIMEOUT:-3600}" sby -f -d "$out/$name" "$out/$name.sby" > /dev/null 2>&1 || true
     status=$(cut -d' ' -f1 "$out/$name/status" 2>/dev/null || echo TIMEOUT)
     printf '%s elem=%s mode=%s cexp=%s seconds=%s\n' "$status" "$elem" "$mode" "$cexp" \
         "$(($(date +%s) - start))"

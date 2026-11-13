@@ -10,6 +10,8 @@
 | Python 3, C++17 compiler | Structural checks, testbenches, numerics emulation, cycle model |
 | [Bazelisk](https://github.com/bazelbuild/bazelisk/releases) | `make layout*` and `make ppa*` |
 | [KLayout](https://www.klayout.de/build.html) | GDS output and inspection |
+| [SymbiYosys](https://github.com/YosysHQ/sby) and [Bitwuzla](https://bitwuzla.github.io/) | `make formal-mx` (both ship in the [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build)) |
+| [Verible](https://github.com/chipsalliance/verible) | `make lint-mx` |
 
 Check them before a build:
 
