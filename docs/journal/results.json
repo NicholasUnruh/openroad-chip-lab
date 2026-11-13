@@ -31,6 +31,7 @@
   {"format": "NVFP4", "metric": "energy_per_mac_pj", "value": 0.254, "unit": "pJ (ASAP7)", "source": "docs/numerics-results.md"},
   {"format": "NVFP4", "metric": "loss_penalty_pct", "value": 17.34, "unit": "% test loss vs FP32", "source": "docs/numerics-results.md"},
   {"format": "NVFP4-SR", "metric": "loss_penalty_pct", "value": 5.6, "unit": "% test loss vs FP32", "source": "docs/numerics-results.md"},
+  {"format": "MXFP8", "metric": "gpt2_loss_penalty_pct", "value": 0.23, "unit": "% val loss vs BF16", "source": "docs/journal/data/training-gpt2.json", "note": "emulated: transformer-block Linear GEMMs (forward, dgrad, wgrad); BF16: attention QK/AV, embeddings, tied LM head (arXiv 2509.25149)"},
   {"format": "BF16", "metric": "tile_gemm32_energy_per_mac_pj", "value": 108.0, "unit": "pJ (SKY130HD tile, 40 MHz)", "source": "docs/v7-results.md"},
   {"format": "BF16", "metric": "tile_pipelined_energy_per_mac_pj", "value": 132.0, "unit": "pJ (SKY130HD tile, 40 MHz)", "source": "docs/v7-results.md"},
   {"format": "MXFP8", "metric": "tile_gemm32_energy_per_mac_pj", "value": 93.1, "unit": "pJ (SKY130HD tile, 40 MHz)", "source": "docs/v7-results.md"},

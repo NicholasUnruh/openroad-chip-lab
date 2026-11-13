@@ -1,0 +1,27 @@
+{
+ "model": "GPT-2 124M, FineWeb-Edu, 300M tokens, seed 1337, identical data order",
+ "scope": "emulated: transformer-block Linear GEMMs (forward, dgrad, wgrad); BF16: attention QK/AV, embeddings, tied LM head (arXiv 2509.25149)",
+ "runs": {
+  "bf16": {
+   "status": "complete",
+   "final_step": 4577,
+   "final_tokens": 299958272,
+   "final_val_loss": 3.7283,
+   "median_tokens_per_s": 24039,
+   "steps_with_exact_fallback": 0,
+   "exact_fallback_gemms": 0,
+   "shared_gpu_events": 0
+  },
+  "mxfp8": {
+   "status": "complete",
+   "final_step": 4577,
+   "final_tokens": 299958272,
+   "final_val_loss": 3.7369,
+   "median_tokens_per_s": 6630,
+   "steps_with_exact_fallback": 1406,
+   "exact_fallback_gemms": 6362,
+   "shared_gpu_events": 0,
+   "penalty_pct_vs_bf16": 0.23
+  }
+ }
+}
